@@ -1,0 +1,530 @@
+---
+title: "Ejecutar Intents"
+description: "Guia practica para ejecutar operaciones DeFi con intents"
+---
+
+Esta guia te muestra como ejecutar diferentes tipos de intents, monitorear su progreso, y manejar los resultados.
+
+## Ejecutar un Intent de Lending
+
+El caso mas comun: depositar fondos para ganar intereses.
+
+<CodeGroup>
+```javascript JavaScript
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+
+// Crear intent de lending
+const intent = await pan.lend({
+  walletId: 'pan_wallet_abc123',
+  amount: 1000,
+  asset: 'USDC'
+  // No especificamos chain - Pan elige la mejor
+});
+
+console.log('Intent creado:', intent.id);
+console.log('Estado:', intent.status);
+console.log('Estrategia:', intent.executionPlan?.strategy);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.pan.dev/v1/intents',
+    headers={
+        'Authorization': f'Bearer {API_KEY}',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'walletId': 'pan_wallet_abc123',
+        'action': 'lend',
+        'amount': 1000,
+        'asset': 'USDC'
+    }
+)
+
+intent = response.json()
+print(f"Intent: {intent['id']}")
+print(f"Estado: {intent['status']}")
+```
+
+```bash cURL
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "action": "lend",
+    "amount": 1000,
+    "asset": "USDC"
+  }'
+```
+</CodeGroup>
+
+## Flujo Completo con Monitoreo
+
+```javascript
+async function ejecutarLending(walletId, amount) {
+  console.log(`Iniciando lending de ${amount} USDC...`);
+
+  // 1. Verificar balances primero
+  const balances = await pan.wallet.getBalances(walletId);
+  console.log(`Balance total: $${balances.totalUsdValue}`);
+
+  // 2. Verificar yields disponibles
+  const yields = await pan.yields.getAll();
+  console.log(`Mejor APY: ${yields.bestYield.apy}% en ${yields.bestYield.chain}`);
+
+  // 3. Crear intent
+  const intent = await pan.lend({
+    walletId,
+    amount,
+    asset: 'USDC'
+  });
+
+  console.log(`Intent creado: ${intent.id}`);
+  console.log(`Plan: ${intent.executionPlan?.strategy}`);
+
+  // 4. Monitorear ejecucion
+  const resultado = await monitorearIntent(intent.id);
+
+  // 5. Mostrar resultado
+  console.log('\n=== Resultado ===');
+  console.log(`Estado: ${resultado.status}`);
+  console.log(`Gas total: $${resultado.results.totalGasCostUsd}`);
+  console.log(`Monto final: ${resultado.results.finalAmount} USDC`);
+  console.log(`APY: ${resultado.results.apy}%`);
+
+  return resultado;
+}
+
+async function monitorearIntent(intentId) {
+  const maxIntentos = 120; // 10 minutos
+  let intentos = 0;
+
+  while (intentos < maxIntentos) {
+    const intent = await pan.getIntent(intentId);
+
+    // Mostrar progreso
+    if (intent.executionPlan) {
+      const total = intent.executionPlan.steps.length;
+      const completados = intent.results?.completedSteps || 0;
+      console.log(`  [${completados}/${total}] ${intent.status}`);
+    }
+
+    // Verificar estado final
+    if (intent.status === 'completed') {
+      return intent;
+    }
+
+    if (intent.status === 'failed') {
+      throw new Error(`Intent fallido: ${intent.error.message}`);
+    }
+
+    // Esperar 5 segundos
+    await new Promise(r => setTimeout(r, 5000));
+    intentos++;
+  }
+
+  throw new Error('Timeout esperando intent');
+}
+
+// Ejecutar
+await ejecutarLending('pan_wallet_abc123', 1000);
+```
+
+## Ejecutar Withdraw
+
+Retirar fondos de un protocolo de lending:
+
+```javascript
+const intent = await pan.withdraw({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  chain: 'base' // Requerido: de donde retirar
+});
+
+const resultado = await monitorearIntent(intent.id);
+console.log(`Retirado: ${resultado.results.finalAmount} USDC`);
+```
+
+## Ejecutar Bridge
+
+Mover fondos entre chains:
+
+```javascript
+const intent = await pan.bridge({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  fromChain: 'arbitrum',
+  toChain: 'base'
+});
+
+const resultado = await monitorearIntent(intent.id);
+console.log(`Transferido a Base: ${resultado.results.finalAmount} USDC`);
+```
+
+## Verificar Antes de Ejecutar
+
+Siempre verifica que hay fondos suficientes:
+
+```javascript
+async function verificarYEjecutar(walletId, amount, asset = 'USDC') {
+  // 1. Obtener balances
+  const { balances, totalUsdValue } = await pan.wallet.getBalances(walletId);
+
+  // 2. Calcular total del asset
+  let totalAsset = 0;
+  for (const [chain, tokens] of Object.entries(balances)) {
+    const token = tokens.find(t => t.symbol === asset);
+    if (token) {
+      totalAsset += parseFloat(token.balanceFormatted);
+    }
+  }
+
+  console.log(`${asset} disponible: ${totalAsset}`);
+  console.log(`${asset} requerido: ${amount}`);
+
+  // 3. Verificar suficiencia
+  if (totalAsset < amount) {
+    throw new Error(
+      `Fondos insuficientes. Tienes ${totalAsset} ${asset}, necesitas ${amount}`
+    );
+  }
+
+  // 4. Obtener mejor yield
+  const { bestYield } = await pan.yields.getAll();
+  console.log(`Mejor APY: ${bestYield.apy}% en ${bestYield.chain}`);
+
+  // 5. Confirmar con usuario (opcional)
+  const confirmar = await preguntarUsuario(
+    `Depositar ${amount} ${asset} a ${bestYield.apy}% APY?`
+  );
+
+  if (!confirmar) {
+    console.log('Operacion cancelada');
+    return null;
+  }
+
+  // 6. Ejecutar
+  const intent = await pan.lend({ walletId, amount, asset });
+  return await monitorearIntent(intent.id);
+}
+```
+
+## Mostrar Progreso al Usuario
+
+```javascript
+class IntentTracker {
+  constructor(onUpdate) {
+    this.onUpdate = onUpdate;
+  }
+
+  async track(intentId) {
+    while (true) {
+      const intent = await pan.getIntent(intentId);
+
+      // Calcular progreso
+      const progress = this.calcularProgreso(intent);
+
+      // Notificar UI
+      this.onUpdate({
+        status: intent.status,
+        progress,
+        step: this.getCurrentStep(intent),
+        transactions: intent.results?.transactions || [],
+        error: intent.error
+      });
+
+      // Verificar fin
+      if (intent.status === 'completed' || intent.status === 'failed') {
+        return intent;
+      }
+
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+
+  calcularProgreso(intent) {
+    if (!intent.executionPlan) return 0;
+    const total = intent.executionPlan.steps.length;
+    const completados = intent.results?.completedSteps || 0;
+
+    // Ajustar por estado actual
+    if (intent.status === 'planning') return 5;
+    if (intent.status === 'completed') return 100;
+
+    return Math.round(10 + (completados / total) * 85);
+  }
+
+  getCurrentStep(intent) {
+    if (intent.status === 'planning') {
+      return { type: 'planning', message: 'Calculando mejor estrategia...' };
+    }
+
+    if (!intent.executionPlan) return null;
+
+    const completados = intent.results?.completedSteps || 0;
+    const pasoActual = intent.executionPlan.steps[completados];
+
+    if (!pasoActual) return null;
+
+    const mensajes = {
+      bridge: `Transfiriendo de ${pasoActual.from} a ${pasoActual.to}...`,
+      deposit: `Depositando en ${pasoActual.protocol}...`,
+      withdraw: `Retirando de ${pasoActual.protocol}...`,
+      swap: `Intercambiando tokens...`
+    };
+
+    return {
+      type: pasoActual.type,
+      message: mensajes[pasoActual.type] || 'Procesando...'
+    };
+  }
+}
+
+// Uso
+const tracker = new IntentTracker((update) => {
+  console.log(`[${update.progress}%] ${update.step?.message || update.status}`);
+
+  // Actualizar UI
+  setProgress(update.progress);
+  setMessage(update.step?.message);
+
+  // Mostrar transacciones completadas
+  update.transactions.forEach(tx => {
+    console.log(`  ✓ ${tx.type}: ${tx.txHash}`);
+  });
+});
+
+const resultado = await tracker.track(intent.id);
+```
+
+## Manejo de Errores
+
+```javascript
+async function ejecutarConManejo(params) {
+  try {
+    const intent = await pan.lend(params);
+    return await monitorearIntent(intent.id);
+  } catch (error) {
+    switch (error.code) {
+      case 'INSUFFICIENT_FUNDS':
+        console.error('No hay fondos suficientes');
+        console.error(`Necesitas: ${error.details.required}`);
+        console.error(`Tienes: ${error.details.available}`);
+        // Mostrar UI para depositar
+        break;
+
+      case 'WALLET_NOT_FOUND':
+        console.error('Wallet no encontrada');
+        // Crear wallet primero
+        break;
+
+      case 'BRIDGE_FAILED':
+        console.error('Bridge fallo - los fondos estan seguros en origen');
+        // Reintentar o notificar usuario
+        break;
+
+      case 'DEPOSIT_FAILED':
+        console.error('Deposito fallo - fondos en wallet de destino');
+        // Reintentar deposito
+        break;
+
+      case 'RATE_LIMITED':
+        console.error('Demasiadas solicitudes - espera un momento');
+        await new Promise(r => setTimeout(r, 60000));
+        return ejecutarConManejo(params); // Reintentar
+        break;
+
+      default:
+        console.error('Error inesperado:', error.message);
+        throw error;
+    }
+  }
+}
+```
+
+## Reintentar Intents Fallidos
+
+```javascript
+async function ejecutarConReintentos(params, maxReintentos = 3) {
+  const erroresReintentables = [
+    'BRIDGE_TIMEOUT',
+    'NETWORK_ERROR',
+    'RPC_ERROR'
+  ];
+
+  for (let intento = 1; intento <= maxReintentos; intento++) {
+    try {
+      console.log(`Intento ${intento}/${maxReintentos}...`);
+
+      const intent = await pan.lend(params);
+      return await monitorearIntent(intent.id);
+
+    } catch (error) {
+      console.error(`Intento ${intento} fallido:`, error.message);
+
+      // Solo reintentar errores transitorios
+      if (!erroresReintentables.includes(error.code)) {
+        throw error;
+      }
+
+      // Backoff exponencial
+      const espera = Math.pow(2, intento) * 5000; // 10s, 20s, 40s
+      console.log(`Esperando ${espera/1000}s antes de reintentar...`);
+      await new Promise(r => setTimeout(r, espera));
+    }
+  }
+
+  throw new Error(`Fallido despues de ${maxReintentos} intentos`);
+}
+```
+
+## Ejemplo con React
+
+```jsx
+import { useState, useCallback } from 'react';
+import { usePan } from './hooks/usePan';
+
+function LendingForm({ walletId }) {
+  const pan = usePan();
+  const [amount, setAmount] = useState('');
+  const [status, setStatus] = useState('idle');
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+
+  const ejecutar = useCallback(async () => {
+    try {
+      setStatus('loading');
+      setError(null);
+      setProgress(0);
+
+      // Crear intent
+      const intent = await pan.lend({
+        walletId,
+        amount: parseFloat(amount),
+        asset: 'USDC'
+      });
+
+      setStatus('executing');
+
+      // Monitorear
+      while (true) {
+        const updated = await pan.getIntent(intent.id);
+
+        // Actualizar progreso
+        if (updated.executionPlan) {
+          const total = updated.executionPlan.steps.length;
+          const done = updated.results?.completedSteps || 0;
+          setProgress(Math.round((done / total) * 100));
+        }
+
+        // Verificar fin
+        if (updated.status === 'completed') {
+          setStatus('completed');
+          setResult(updated.results);
+          break;
+        }
+
+        if (updated.status === 'failed') {
+          throw new Error(updated.error.message);
+        }
+
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    } catch (err) {
+      setStatus('error');
+      setError(err.message);
+    }
+  }, [pan, walletId, amount]);
+
+  return (
+    <div className="lending-form">
+      {status === 'idle' && (
+        <>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Cantidad USDC"
+          />
+          <button onClick={ejecutar} disabled={!amount}>
+            Depositar
+          </button>
+        </>
+      )}
+
+      {status === 'loading' && (
+        <div>Creando operacion...</div>
+      )}
+
+      {status === 'executing' && (
+        <div>
+          <div>Ejecutando... {progress}%</div>
+          <progress value={progress} max="100" />
+        </div>
+      )}
+
+      {status === 'completed' && (
+        <div className="success">
+          <h3>Completado!</h3>
+          <p>Monto depositado: {result.finalAmount} USDC</p>
+          <p>APY: {result.apy}%</p>
+          <p>Gas: ${result.totalGasCostUsd}</p>
+          <button onClick={() => setStatus('idle')}>
+            Nueva operacion
+          </button>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="error">
+          <p>Error: {error}</p>
+          <button onClick={() => setStatus('idle')}>
+            Reintentar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Monitorear Estado"
+    icon="chart-line"
+    href="/guias/monitorear-estado"
+  >
+    Tecnicas avanzadas de monitoreo
+  </Card>
+  <Card
+    title="Obtener Yields"
+    icon="percent"
+    href="/guias/obtener-yields"
+  >
+    Como consultar APYs disponibles
+  </Card>
+  <Card
+    title="Manejo de Errores"
+    icon="exclamation-triangle"
+    href="/guias/mejores-practicas/manejo-errores"
+  >
+    Estrategias de manejo de errores
+  </Card>
+  <Card
+    title="API de Intents"
+    icon="terminal"
+    href="/api/intents/crear-intent"
+  >
+    Referencia completa del endpoint
+  </Card>
+</CardGroup>

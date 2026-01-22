@@ -1,0 +1,267 @@
+---
+title: "Manejo de Errores"
+description: "Como manejar errores correctamente con Pan API"
+---
+
+## Estructura de Errores
+
+```json
+{
+  "error": "ERROR_CODE",
+  "message": "Descripcion legible",
+  "details": {
+    "campo": "valor"
+  }
+}
+```
+
+## Errores Comunes
+
+### Autenticacion
+
+| Codigo | Causa | Solucion |
+|--------|-------|----------|
+| `UNAUTHORIZED` | API key invalida | Verificar API key |
+| `FORBIDDEN` | Sin permisos | Verificar plan/limites |
+
+### Recursos
+
+| Codigo | Causa | Solucion |
+|--------|-------|----------|
+| `WALLET_NOT_FOUND` | Wallet no existe | Crear wallet primero |
+| `INTENT_NOT_FOUND` | Intent no existe | Verificar ID |
+| `WALLET_ALREADY_EXISTS` | Usuario tiene wallet | Usar GET |
+
+### Ejecucion
+
+| Codigo | Causa | Solucion |
+|--------|-------|----------|
+| `INSUFFICIENT_FUNDS` | Sin fondos | Depositar mas |
+| `BRIDGE_FAILED` | Bridge fallo | Reintentar |
+| `DEPOSIT_FAILED` | Deposito fallo | Verificar protocolo |
+
+### Limites
+
+| Codigo | Causa | Solucion |
+|--------|-------|----------|
+| `RATE_LIMITED` | Muchas requests | Esperar/backoff |
+| `WALLET_LIMIT_EXCEEDED` | Limite de plan | Upgrade |
+| `INSUFFICIENT_CREDITS` | Sin creditos | Comprar |
+
+## Patron de Manejo
+
+```typescript
+import { Pan, PanError } from '@pan/sdk';
+
+async function ejecutar<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof PanError) {
+      return manejarErrorPan(error);
+    }
+    throw error;
+  }
+}
+
+function manejarErrorPan(error: PanError): never {
+  switch (error.code) {
+    // Errores recuperables
+    case 'RATE_LIMITED':
+      throw new RetryableError(error.message, error.details?.retryAfter);
+
+    case 'WALLET_NOT_FOUND':
+      throw new NotFoundError('Usuario no tiene wallet');
+
+    case 'INSUFFICIENT_FUNDS':
+      throw new ValidationError(
+        `Faltan ${error.details?.shortfall} ${error.details?.asset}`
+      );
+
+    // Errores de configuracion
+    case 'UNAUTHORIZED':
+      throw new ConfigError('API key invalida');
+
+    case 'WALLET_LIMIT_EXCEEDED':
+      throw new LimitError('Actualiza tu plan para mas wallets');
+
+    // Errores de servidor
+    case 'INTERNAL_ERROR':
+    case 'SERVICE_UNAVAILABLE':
+      throw new ServerError('Intenta mas tarde');
+
+    default:
+      throw error;
+  }
+}
+```
+
+## Reintentos Automaticos
+
+```typescript
+async function conReintentos<T>(
+  fn: () => Promise<T>,
+  maxReintentos = 3
+): Promise<T> {
+  const erroresReintentables = [
+    'RATE_LIMITED',
+    'INTERNAL_ERROR',
+    'SERVICE_UNAVAILABLE',
+    'BRIDGE_TIMEOUT'
+  ];
+
+  for (let i = 0; i < maxReintentos; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!(error instanceof PanError)) throw error;
+      if (!erroresReintentables.includes(error.code)) throw error;
+
+      const espera = Math.pow(2, i) * 1000; // Backoff exponencial
+      console.log(`Reintento ${i + 1}/${maxReintentos} en ${espera}ms...`);
+      await new Promise(r => setTimeout(r, espera));
+    }
+  }
+
+  throw new Error('Reintentos agotados');
+}
+
+// Uso
+const wallet = await conReintentos(() =>
+  pan.wallet.create({ userId: 'user_123' })
+);
+```
+
+## Manejo por Operacion
+
+### Crear Wallet
+
+```typescript
+async function crearWalletSeguro(userId: string) {
+  try {
+    return await pan.wallet.create({ userId });
+  } catch (error) {
+    if (!(error instanceof PanError)) throw error;
+
+    switch (error.code) {
+      case 'WALLET_ALREADY_EXISTS':
+        // Usuario ya tiene wallet, obtenerla
+        return await pan.wallet.get(userId);
+
+      case 'WALLET_LIMIT_EXCEEDED':
+        throw new Error('Limite alcanzado. Contacta soporte.');
+
+      default:
+        throw error;
+    }
+  }
+}
+```
+
+### Ejecutar Intent
+
+```typescript
+async function ejecutarIntent(params: LendParams) {
+  // 1. Verificar fondos primero
+  const balances = await pan.wallet.getBalances(params.walletId);
+  const disponible = calcularTotal(balances, params.asset);
+
+  if (disponible < params.amount) {
+    throw new Error(
+      `Fondos insuficientes. Tienes ${disponible}, necesitas ${params.amount}`
+    );
+  }
+
+  // 2. Crear intent
+  try {
+    const intent = await pan.lend(params);
+    return await esperarIntent(intent.id);
+  } catch (error) {
+    if (!(error instanceof PanError)) throw error;
+
+    switch (error.code) {
+      case 'BRIDGE_FAILED':
+        // Los fondos estan seguros, se puede reintentar
+        console.log('Bridge fallo, reintentando...');
+        return ejecutarIntent(params);
+
+      case 'DEPOSIT_FAILED':
+        // Fondos en destino pero no depositados
+        throw new Error('Deposito fallo. Verifica tu wallet.');
+
+      default:
+        throw error;
+    }
+  }
+}
+```
+
+## Errores en UI
+
+```tsx
+function ErrorDisplay({ error }: { error: PanError }) {
+  const mensajes: Record<string, { titulo: string; accion?: string }> = {
+    INSUFFICIENT_FUNDS: {
+      titulo: 'Fondos insuficientes',
+      accion: 'Deposita mas fondos'
+    },
+    WALLET_NOT_FOUND: {
+      titulo: 'Wallet no encontrada',
+      accion: 'Crea una wallet primero'
+    },
+    RATE_LIMITED: {
+      titulo: 'Demasiadas solicitudes',
+      accion: 'Espera un momento'
+    },
+    UNAUTHORIZED: {
+      titulo: 'Error de autenticacion',
+      accion: 'Contacta soporte'
+    }
+  };
+
+  const info = mensajes[error.code] || {
+    titulo: 'Error inesperado',
+    accion: 'Intenta de nuevo'
+  };
+
+  return (
+    <div className="error-card">
+      <h3>{info.titulo}</h3>
+      <p>{error.message}</p>
+      {info.accion && <p className="action">{info.accion}</p>}
+    </div>
+  );
+}
+```
+
+## Logging de Errores
+
+```typescript
+function logError(error: PanError, context: object) {
+  const logData = {
+    timestamp: new Date().toISOString(),
+    code: error.code,
+    message: error.message,
+    statusCode: error.statusCode,
+    details: error.details,
+    context: sanitize(context) // Remover datos sensibles
+  };
+
+  // Enviar a servicio de monitoreo
+  if (process.env.NODE_ENV === 'production') {
+    sendToMonitoring(logData);
+  } else {
+    console.error('Pan Error:', logData);
+  }
+}
+
+function sanitize(obj: object): object {
+  const sensibles = ['apiKey', 'token', 'password'];
+  return Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [
+      k,
+      sensibles.includes(k) ? '[REDACTED]' : v
+    ])
+  );
+}
+```

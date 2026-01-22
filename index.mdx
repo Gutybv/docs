@@ -1,130 +1,492 @@
 ---
 title: "Pan API"
-description: "Build DeFi features without the complexity. Pan simplifies digital asset management and blockchain operations for modern applications."
+description: "Integra DeFi en tu aplicacion con 6 lineas de codigo. Pan simplifica operaciones blockchain para instituciones financieras en LATAM."
 ---
 
 <Hero
-  title="DeFi made simple"
-  subtitle="Pan API abstracts away blockchain complexity, letting you build sophisticated DeFi features without deep smart contract knowledge or private key management."
+  title="DeFi sin Complicaciones"
+  subtitle="Pan API abstrae toda la complejidad de blockchain, permitiendote integrar prestamos, bridges y operaciones DeFi sin conocimientos de smart contracts ni manejo de llaves privadas."
   image="/images/hero-light.png"
   darkImage="/images/hero-dark.png"
 />
 
+## Por que Pan?
+
+Integrar DeFi tradicionalmente requiere:
+- Entender smart contracts y ABIs
+- Manejar llaves privadas de forma segura
+- Gestionar nonces y precios de gas
+- Construir logica para swaps, bridges y depositos
+- Monitorear transacciones en multiples chains
+
+**Con Pan, todo esto se reduce a una sola llamada API.**
+
+<CodeGroup>
+```javascript Sin Pan (100+ lineas)
+// 1. Configurar provider
+const provider = new ethers.JsonRpcProvider(RPC_URL);
+const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+
+// 2. Obtener contrato de Aave
+const poolAddress = "0x794a61358D6845594F94dc1DB02A252b5b4814aD";
+const poolAbi = [...]; // ABI extenso
+const pool = new ethers.Contract(poolAddress, poolAbi, wallet);
+
+// 3. Aprobar tokens
+const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, wallet);
+const approveTx = await usdc.approve(poolAddress, amount);
+await approveTx.wait();
+
+// 4. Calcular gas, manejar errores, depositar...
+// ... 80+ lineas mas de codigo
+```
+
+```javascript Con Pan (6 lineas)
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({ apiKey: 'pan_sk_...' });
+
+const intent = await pan.lend({
+  walletId: 'wallet_abc123',
+  amount: 1000,
+  asset: 'USDC'
+});
+// Pan encuentra el mejor APY, hace bridges si es necesario,
+// y deposita automaticamente
+```
+</CodeGroup>
+
 <CardGroup cols={2}>
   <Card
-    title="🚀 Quick start"
+    title="Inicio Rapido"
     icon="rocket"
-    href="/guides/quickstart"
+    href="/guias/inicio-rapido"
   >
-    Get your first API call working in under 5 minutes
+    Tu primera llamada API en menos de 5 minutos
   </Card>
   <Card
-    title="🔑 Authentication"
+    title="Autenticacion"
     icon="key"
-    href="/guides/authentication"
+    href="/guias/autenticacion"
   >
-    Learn how to authenticate and secure your API requests
+    Como autenticar y asegurar tus requests
   </Card>
   <Card
-    title="💼 Core concepts"
+    title="Conceptos Clave"
     icon="book"
-    href="/guides/concepts/overview"
+    href="/guias/conceptos/vision-general"
   >
-    Understand wallets, intents, and execution plans
+    Entiende wallets, intents y planes de ejecucion
   </Card>
   <Card
-    title="📚 API reference"
+    title="Referencia API"
     icon="terminal"
-    href="/api-reference/introduction"
+    href="/api/introduccion"
   >
-    Complete API endpoint documentation with examples
+    Documentacion completa de todos los endpoints
   </Card>
 </CardGroup>
 
-## What is Pan?
-
-Pan is a comprehensive platform designed to simplify the integration of advanced digital asset management and DeFi operations into web and mobile applications. Our API abstracts away the inherent complexity of blockchain interactions, allowing developers to implement sophisticated decentralized finance features without deep knowledge of smart contracts, private key management, or transaction optimization.
-
-<Columns cols={3}>
-  <Card
-    title="🛡️ Secure by default"
-    icon="shield"
-  >
-    Enterprise-grade infrastructure with encrypted key storage and multi-layer security
-  </Card>
-  <Card
-    title="⚡ Fast & scalable"
-    icon="bolt"
-  >
-    Optimized queries, parallel processing, and intelligent caching for peak performance
-  </Card>
-  <Card
-    title="🔗 Multi-chain"
-    icon="link"
-  >
-    Unified API that works across multiple blockchains with a single wallet address
-  </Card>
-</Columns>
-
-## Key features
+## Caracteristicas Principales
 
 <AccordionGroup>
-  <Accordion title="Multi-chain wallet management">
-    Create and manage wallets that work seamlessly across multiple blockchains. Each wallet gets a single address that's compatible with all supported chains, eliminating the need to manage separate addresses per blockchain.
+  <Accordion title="Wallets Multi-chain" icon="wallet">
+    Crea wallets que funcionan en multiples blockchains con una sola direccion. No necesitas manejar direcciones separadas por chain.
+
+    ```javascript
+    const wallet = await pan.wallet.create({ userId: 'usuario_123' });
+    // wallet.address funciona en Ethereum, Arbitrum, Base, etc.
+    ```
+
+    **Beneficios:**
+    - Una direccion, multiples chains
+    - Custodia no-custodial via Privy
+    - Balances unificados
   </Accordion>
-  
-  <Accordion title="Intent-based operations">
-    Express high-level financial goals instead of specifying exact transactions. Pan automatically determines the best execution strategy, handling swaps, bridges, consolidation, and deposits as needed.
+
+  <Accordion title="Intents: Operaciones basadas en objetivos" icon="target">
+    En lugar de especificar transacciones exactas, expresas tu objetivo y Pan determina la mejor estrategia.
+
+    ```javascript
+    // Quiero prestar 1000 USDC donde mejor pague
+    const intent = await pan.lend({
+      walletId: 'wallet_abc123',
+      amount: 1000,
+      asset: 'USDC'
+      // No especificas chain - Pan encuentra el mejor APY
+    });
+    ```
+
+    Pan automaticamente:
+    - Analiza APYs en todas las chains
+    - Determina si necesita hacer bridge
+    - Ejecuta swaps si es necesario
+    - Deposita en el protocolo optimo
   </Accordion>
-  
-  <Accordion title="Automatic execution planning">
-    Our intelligent system analyzes wallet state, evaluates DeFi protocols, and generates optimized execution plans that minimize gas costs and slippage while maximizing efficiency.
+
+  <Accordion title="Planificacion Automatica" icon="route">
+    El sistema inteligente de Pan analiza tu wallet, evalua protocolos DeFi, y genera planes optimizados que minimizan costos de gas.
+
+    **Ejemplo de plan generado:**
+    ```json
+    {
+      "strategy": "single-bridge",
+      "steps": [
+        { "type": "bridge", "from": "arbitrum", "to": "base", "amount": "1000" },
+        { "type": "deposit", "protocol": "aave", "amount": "1000" }
+      ],
+      "estimatedGas": "0.002 ETH",
+      "estimatedTime": "2-5 minutos"
+    }
+    ```
   </Accordion>
-  
-  <Accordion title="Real-time status tracking">
-    Monitor intent execution in real-time with detailed progress updates and comprehensive error reporting. Every operation is transparent and traceable.
+
+  <Accordion title="Multi-chain Nativo" icon="link">
+    Pan soporta multiples chains de forma nativa:
+
+    | Chain | Mainnet | Testnet |
+    |-------|---------|---------|
+    | Ethereum | chainId: 1 | Sepolia (11155111) |
+    | Arbitrum | chainId: 42161 | Sepolia (421614) |
+    | Base | chainId: 8453 | Sepolia (84532) |
+
+    Consulta balances de todas las chains con una sola llamada:
+    ```javascript
+    const balances = await pan.wallet.getBalances('wallet_abc123');
+    // Retorna balances de ETH, Arbitrum, Base, etc.
+    ```
   </Accordion>
 </AccordionGroup>
 
-## How it works
+## Como Funciona
 
 <Steps>
-  <Step title="Authenticate">
-    Get your API key from the dashboard and include it in all requests using the `Authorization` header.
+  <Step title="Autentica">
+    Obtiene tu API key desde el dashboard e incluyela en todas tus requests usando el header `Authorization`.
+
+    ```bash
+    Authorization: Bearer pan_sk_tu_api_key_aqui
+    ```
   </Step>
-  
-  <Step title="Create wallets">
-    Create wallets for your users with a simple API call. Each wallet automatically supports all available blockchains.
+
+  <Step title="Crea Wallets">
+    Crea wallets para tus usuarios con una simple llamada. Cada wallet soporta automaticamente todas las blockchains disponibles.
+
+    ```bash
+    POST /v1/wallets
+    {
+      "userId": "usuario_123",
+      "metadata": { "email": "usuario@ejemplo.com" }
+    }
+    ```
   </Step>
-  
-  <Step title="Check balances">
-    Query balances across all chains and tokens with a single endpoint. Get real-time asset information including USD values.
+
+  <Step title="Consulta Balances">
+    Consulta balances de todas las chains y tokens con un solo endpoint. Obtiene informacion de activos en tiempo real incluyendo valores en USD.
+
+    ```bash
+    GET /v1/balances/wallet_abc123
+    ```
   </Step>
-  
-  <Step title="Execute intents">
-    Define what you want to achieve (like "lend $1000 USDC"), and Pan handles all the complexity of swaps, bridges, and deposits automatically.
+
+  <Step title="Ejecuta Intents">
+    Define lo que quieres lograr (por ejemplo, "prestar $1000 USDC"), y Pan maneja toda la complejidad de swaps, bridges y depositos automaticamente.
+
+    ```bash
+    POST /v1/intents
+    {
+      "walletId": "wallet_abc123",
+      "action": "lend",
+      "amount": 1000,
+      "asset": "USDC"
+    }
+    ```
   </Step>
 </Steps>
 
-## Ready to get started?
+## Casos de Uso
+
+<Columns cols={3}>
+  <Card title="Fintechs LATAM" icon="building-columns">
+    Integra rendimientos DeFi en tu app de pagos o remesas sin manejar blockchain directamente.
+  </Card>
+  <Card title="Tesorerías Crypto" icon="coins">
+    Optimiza automaticamente el yield de tu tesoreria moviendo fondos al mejor protocolo.
+  </Card>
+  <Card title="Neobancos" icon="mobile">
+    Ofrece productos de ahorro con rendimientos DeFi sin exponer complejidad al usuario final.
+  </Card>
+</Columns>
+
+## Ejemplo Completo
+
+Este ejemplo muestra el flujo completo: crear wallet, fondear, consultar balance, y ejecutar un intent de lending:
+
+<CodeGroup>
+```javascript JavaScript
+import { Pan } from '@pan/sdk';
+
+// Inicializar cliente
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+
+async function ejemploCompleto() {
+  // 1. Crear wallet para un usuario
+  const wallet = await pan.wallet.create({
+    userId: 'usuario_maria_123',
+    metadata: {
+      nombre: 'Maria Garcia',
+      email: 'maria@ejemplo.com'
+    }
+  });
+
+  console.log(`Wallet creada: ${wallet.address}`);
+  // Wallet creada: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+
+  // 2. Consultar balances (despues de fondear externamente)
+  const balances = await pan.wallet.getBalances(wallet.id);
+
+  console.log('Balances por chain:');
+  for (const [chain, tokens] of Object.entries(balances.balances)) {
+    for (const token of tokens) {
+      console.log(`  ${chain}: ${token.balanceFormatted} ${token.symbol}`);
+    }
+  }
+  // arbitrum: 500.00 USDC
+  // base: 300.00 USDC
+  // ethereum: 200.00 USDC
+
+  // 3. Obtener mejores yields disponibles
+  const yields = await pan.yields.getAll();
+
+  console.log('Mejores APYs:');
+  yields.forEach(y => {
+    console.log(`  ${y.chain}: ${y.apy}% en ${y.protocol}`);
+  });
+  // base: 8.5% en Aave
+  // arbitrum: 7.2% en Aave
+  // ethereum: 5.1% en Aave
+
+  // 4. Crear intent de lending
+  // Pan automaticamente:
+  // - Ve que Base tiene mejor APY (8.5%)
+  // - Hace bridge de los fondos de Arbitrum y Ethereum a Base
+  // - Deposita todo en Aave Base
+  const intent = await pan.lend({
+    walletId: wallet.id,
+    amount: 1000, // Todo el USDC disponible
+    asset: 'USDC'
+  });
+
+  console.log(`Intent creado: ${intent.id}`);
+  console.log(`Estado: ${intent.status}`);
+  console.log(`Estrategia: ${intent.executionPlan?.strategy}`);
+
+  // 5. Monitorear ejecucion
+  let status = intent.status;
+  while (status !== 'completed' && status !== 'failed') {
+    await new Promise(r => setTimeout(r, 5000));
+    const updated = await pan.getIntent(intent.id);
+    status = updated.status;
+    console.log(`Estado actual: ${status}`);
+  }
+
+  if (status === 'completed') {
+    console.log('Lending completado exitosamente!');
+    console.log(`Gas total: $${intent.results.totalGasCostUsd}`);
+  }
+}
+
+ejemploCompleto();
+```
+
+```python Python
+import os
+import time
+import requests
+
+API_KEY = os.environ['PAN_API_KEY']
+BASE_URL = 'https://api.pan.dev/v1'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+def ejemplo_completo():
+    # 1. Crear wallet
+    response = requests.post(
+        f'{BASE_URL}/wallets',
+        headers=headers,
+        json={
+            'userId': 'usuario_maria_123',
+            'metadata': {
+                'nombre': 'Maria Garcia',
+                'email': 'maria@ejemplo.com'
+            }
+        }
+    )
+    wallet = response.json()
+    print(f"Wallet creada: {wallet['address']}")
+
+    # 2. Consultar balances
+    response = requests.get(
+        f"{BASE_URL}/balances/{wallet['id']}",
+        headers=headers
+    )
+    balances = response.json()
+
+    print('Balances por chain:')
+    for chain, tokens in balances['balances'].items():
+        for token in tokens:
+            print(f"  {chain}: {token['balanceFormatted']} {token['symbol']}")
+
+    # 3. Obtener yields
+    response = requests.get(f'{BASE_URL}/yields', headers=headers)
+    yields = response.json()
+
+    print('Mejores APYs:')
+    for y in yields['yields']:
+        print(f"  {y['chain']}: {y['apy']}% en {y['protocol']}")
+
+    # 4. Crear intent
+    response = requests.post(
+        f'{BASE_URL}/intents',
+        headers=headers,
+        json={
+            'walletId': wallet['id'],
+            'action': 'lend',
+            'amount': 1000,
+            'asset': 'USDC'
+        }
+    )
+    intent = response.json()
+    print(f"Intent creado: {intent['id']}")
+
+    # 5. Monitorear
+    status = intent['status']
+    while status not in ['completed', 'failed']:
+        time.sleep(5)
+        response = requests.get(
+            f"{BASE_URL}/intents/{intent['id']}",
+            headers=headers
+        )
+        intent = response.json()
+        status = intent['status']
+        print(f"Estado actual: {status}")
+
+    if status == 'completed':
+        print('Lending completado!')
+
+ejemplo_completo()
+```
+
+```bash cURL
+# 1. Crear wallet
+curl -X POST https://api.pan.dev/v1/wallets \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "usuario_maria_123",
+    "metadata": {
+      "nombre": "Maria Garcia",
+      "email": "maria@ejemplo.com"
+    }
+  }'
+
+# 2. Consultar balances
+curl -X GET https://api.pan.dev/v1/balances/wallet_abc123 \
+  -H "Authorization: Bearer $PAN_API_KEY"
+
+# 3. Obtener yields
+curl -X GET https://api.pan.dev/v1/yields \
+  -H "Authorization: Bearer $PAN_API_KEY"
+
+# 4. Crear intent de lending
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "wallet_abc123",
+    "action": "lend",
+    "amount": 1000,
+    "asset": "USDC"
+  }'
+
+# 5. Monitorear estado
+curl -X GET https://api.pan.dev/v1/intents/intent_xyz789 \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+</CodeGroup>
+
+## Arquitectura de Alto Nivel
+
+```
+Tu Aplicacion
+     |
+     v
++----------------+     +------------------+     +----------------+
+|   Pan API      | --> | Intent Planner   | --> | Execution      |
+|   (REST)       |     | (Estrategia)     |     | Engine         |
++----------------+     +------------------+     +----------------+
+                              |                       |
+                              v                       v
+                       +-------------+         +-------------+
+                       | Balance     |         | Executors   |
+                       | Analyzer    |         | (Bridge,    |
+                       | Yield       |         |  Deposit,   |
+                       | Service     |         |  Swap)      |
+                       +-------------+         +-------------+
+                                                     |
+                                                     v
+                                            +------------------+
+                                            | Blockchains      |
+                                            | (ETH, Arbitrum,  |
+                                            |  Base, etc.)     |
+                                            +------------------+
+```
+
+## Planes y Precios
+
+<CardGroup cols={3}>
+  <Card title="Free" icon="gift">
+    - 100 wallets
+    - 100 creditos/mes
+    - Solo testnets
+    - Soporte por email
+  </Card>
+  <Card title="Pro" icon="star">
+    - 10,000 wallets
+    - 10,000 creditos/mes
+    - Mainnet habilitado
+    - Soporte prioritario
+  </Card>
+  <Card title="Enterprise" icon="building">
+    - Wallets ilimitadas
+    - Creditos custom
+    - SLA dedicado
+    - Soporte 24/7
+  </Card>
+</CardGroup>
+
+## Empieza Ahora
 
 <CardGroup cols={2}>
   <Card
-    title="Get your API key"
+    title="Obtener API Key"
     icon="key"
     href="https://app.pan.dev"
   >
-    Sign up for free and start building in minutes
+    Registrate gratis y comienza a construir en minutos
   </Card>
   <Card
-    title="View examples"
+    title="Ver Ejemplos"
     icon="code"
-    href="/guides/quickstart"
+    href="/ejemplos/fintech-basico"
   >
-    See code examples in multiple languages
+    Explora casos de uso completos con codigo
   </Card>
 </CardGroup>
 
 <Note>
-  **Currently in MVP**: Pan API v1 supports lending intents on Ethereum Sepolia, Base Sepolia, and Arbitrum Sepolia testnets. Mainnet support and additional features are coming soon!
+  **Estado Actual**: Pan API v1 soporta lending en las testnets de Ethereum Sepolia, Base Sepolia, y Arbitrum Sepolia. Soporte mainnet y funcionalidades adicionales proximamente.
 </Note>

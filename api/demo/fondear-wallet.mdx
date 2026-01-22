@@ -1,0 +1,108 @@
+---
+title: "Fondear Wallet (Demo)"
+description: "POST /v1/demo/fund"
+---
+
+Fondea una wallet con tokens de testnet para pruebas.
+
+<Warning>
+  Solo funciona en testnet. No disponible en produccion.
+</Warning>
+
+## Endpoint
+
+```
+POST https://api.pan.dev/v1/demo/fund
+```
+
+## Autenticacion
+
+API Key
+
+## Request
+
+```json
+{
+  "walletId": "pan_wallet_abc123",
+  "chain": "arbitrum-sepolia",
+  "amount": 1000
+}
+```
+
+### Parametros
+
+| Campo | Tipo | Requerido | Descripcion |
+|-------|------|-----------|-------------|
+| `walletId` | string | Si | ID de la wallet |
+| `chain` | string | Si | Chain testnet |
+| `amount` | number | No | Cantidad USDC (default: 1000) |
+
+### Chains Soportadas
+
+- `ethereum-sepolia`
+- `arbitrum-sepolia`
+- `base-sepolia`
+
+## Response
+
+### 200 OK
+
+```json
+{
+  "success": true,
+  "walletId": "pan_wallet_abc123",
+  "chain": "arbitrum-sepolia",
+  "amount": 1000,
+  "asset": "USDC",
+  "txHash": "0x123abc...",
+  "message": "Funds will arrive in 1-2 minutes"
+}
+```
+
+### Errores
+
+| Codigo | Error | Descripcion |
+|--------|-------|-------------|
+| 400 | INVALID_CHAIN | Chain no soportada |
+| 401 | UNAUTHORIZED | API key invalida |
+| 404 | WALLET_NOT_FOUND | Wallet no existe |
+| 429 | RATE_LIMITED | Demasiadas solicitudes |
+
+## Ejemplos
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.pan.dev/v1/demo/fund \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "chain": "arbitrum-sepolia",
+    "amount": 1000
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.pan.dev/v1/demo/fund', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${process.env.PAN_API_KEY}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    walletId: 'pan_wallet_abc123',
+    chain: 'arbitrum-sepolia',
+    amount: 1000
+  })
+});
+
+const result = await response.json();
+console.log('TX:', result.txHash);
+```
+</CodeGroup>
+
+## Notas
+
+- Limite: 1 request por wallet por hora
+- Maximo: 10,000 USDC de testnet por request
+- Los fondos llegan en 1-2 minutos

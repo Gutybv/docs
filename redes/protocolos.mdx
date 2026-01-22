@@ -1,0 +1,323 @@
+---
+title: "Protocolos Integrados"
+description: "Protocolos DeFi utilizados por Pan"
+---
+
+## Protocolos Principales
+
+Pan integra protocolos DeFi de primera linea para ofrecer:
+- **Rendimiento** via Aave V3
+- **Bridges** via Across Protocol
+
+## Aave V3
+
+<Card title="Aave" icon="building-columns">
+  Protocolo de prestamos descentralizado mas grande del mundo.
+  Pan deposita USDC en Aave para generar rendimiento automatico.
+</Card>
+
+### Que es Aave?
+
+Aave es un protocolo de lending/borrowing descentralizado donde:
+- **Depositantes** proveen liquidez y ganan intereses
+- **Prestatarios** toman prestado pagando intereses
+
+Pan actua como depositante, ganando los intereses que pagan los prestatarios.
+
+### APY en Aave
+
+El APY (Annual Percentage Yield) varia segun:
+
+| Factor | Impacto en APY |
+|--------|----------------|
+| Utilizacion del pool | Mayor utilizacion = Mayor APY |
+| Demanda de prestamos | Mas demanda = Mayor APY |
+| Liquidez total | Mas liquidez = Menor APY |
+| Condiciones de mercado | Volatilidad = Mayor demanda |
+
+### APY Tipicos de USDC
+
+| Chain | APY Rango | Notas |
+|-------|-----------|-------|
+| Ethereum | 3-8% | Mayor liquidez, APY estable |
+| Arbitrum | 4-10% | Mas volatil, frecuentemente mayor |
+| Base | 4-12% | Pool mas nuevo, puede ser mayor |
+
+<Note>
+Los APYs son dinamicos y cambian constantemente. Consulta el endpoint
+`/yields` para obtener tasas actuales.
+</Note>
+
+### Direcciones de Aave V3
+
+#### Pool (Lending Pool)
+
+| Chain | Direccion |
+|-------|-----------|
+| Ethereum | `0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2` |
+| Arbitrum | `0x794a61358D6845594F94dc1DB02A252b5b4814aD` |
+| Base | `0xA238Dd80C259a72e81d7e4664a9801593F98d1c5` |
+
+#### aUSDC (Token de deposito)
+
+| Chain | Direccion |
+|-------|-----------|
+| Ethereum | `0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c` |
+| Arbitrum | `0x724dc807b04555b71ed48a6896b6F41593b8C637` |
+| Base | `0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB` |
+
+### Seguridad de Aave
+
+| Metrica | Valor |
+|---------|-------|
+| TVL Total | >$10 billones |
+| Anos operando | 5+ anos |
+| Auditorias | 20+ auditorias |
+| Bug bounties | $250,000+ pagados |
+| Governance | Token AAVE |
+
+### Como Pan Usa Aave
+
+```
+1. Usuario ejecuta lend() con Pan
+2. Pan aprueba USDC para Aave Pool
+3. Pan llama supply() en Aave Pool
+4. Aave mintea aUSDC al wallet del usuario
+5. aUSDC genera rendimiento automaticamente
+```
+
+```typescript
+// Simplificado - lo que hace Pan internamente
+async function depositToAave(wallet: Wallet, amount: bigint) {
+  const pool = new Contract(AAVE_POOL, aavePoolAbi, wallet);
+
+  // Aprobar
+  await usdc.approve(AAVE_POOL, amount);
+
+  // Depositar
+  await pool.supply(
+    USDC_ADDRESS,  // asset
+    amount,        // amount
+    wallet.address, // onBehalfOf
+    0              // referralCode
+  );
+}
+```
+
+## Across Protocol
+
+<Card title="Across" icon="bridge">
+  Protocolo de bridge cross-chain mas rapido y seguro.
+  Pan usa Across para mover fondos entre chains.
+</Card>
+
+### Que es Across?
+
+Across es un bridge optimista que permite mover tokens entre chains de forma:
+- **Rapida** - Minutos en lugar de horas
+- **Barata** - Fees competitivos
+- **Segura** - Respaldado por UMA Protocol
+
+### Como Funciona
+
+```
+1. Usuario quiere mover 1000 USDC de Arbitrum a Base
+2. Pan envia USDC al contrato Across en Arbitrum
+3. Relayers de Across adelantan los fondos en Base
+4. El sistema UMA verifica la transaccion
+5. Relayers son reembolsados del pool de Arbitrum
+```
+
+### Tiempos de Bridge
+
+| Ruta | Tiempo Tipico |
+|------|---------------|
+| Arbitrum → Base | 2-5 minutos |
+| Base → Arbitrum | 2-5 minutos |
+| Ethereum → Arbitrum | 10-20 minutos |
+| Ethereum → Base | 10-20 minutos |
+| Arbitrum → Ethereum | 5-15 minutos |
+| Base → Ethereum | 5-15 minutos |
+
+### Fees de Bridge
+
+| Componente | Descripcion |
+|------------|-------------|
+| LP Fee | ~0.04-0.12% del monto |
+| Relayer Fee | Variable segun liquidez |
+| Gas | Depende de la chain destino |
+
+Ejemplo para bridge de 1000 USDC:
+- LP Fee: ~$0.60
+- Relayer Fee: ~$0.50
+- Gas destino: ~$0.50 (L2) o ~$5 (Ethereum)
+- **Total: ~$1.60 (L2) o ~$6 (a Ethereum)**
+
+### Direcciones de Across
+
+#### SpokePool (Contrato principal)
+
+| Chain | Direccion |
+|-------|-----------|
+| Ethereum | `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` |
+| Arbitrum | `0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A` |
+| Base | `0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64` |
+
+### Seguridad de Across
+
+| Metrica | Valor |
+|---------|-------|
+| Volumen bridgeado | >$5 billones |
+| Uptime | 99.9%+ |
+| Auditorias | OpenZeppelin, Spearbit |
+| Respaldo | UMA Protocol oracle |
+
+### Como Pan Usa Across
+
+```
+1. Usuario ejecuta bridge() o lend() cross-chain
+2. Pan calcula mejor ruta y fees
+3. Pan aprueba tokens para SpokePool
+4. Pan llama depositV3() en Across
+5. Relayers entregan en destino
+6. Pan continua con siguiente paso (ej: depositar en Aave)
+```
+
+```typescript
+// Simplificado - lo que hace Pan internamente
+async function bridgeWithAcross(params: BridgeParams) {
+  const spokePool = new Contract(SPOKE_POOL, spokePoolAbi, wallet);
+
+  // Obtener quote
+  const quote = await getAcrossQuote(params);
+
+  // Aprobar
+  await usdc.approve(SPOKE_POOL, params.amount);
+
+  // Iniciar bridge
+  await spokePool.depositV3(
+    wallet.address,         // depositor
+    wallet.address,         // recipient
+    USDC_ADDRESS,           // inputToken
+    USDC_DESTINATION,       // outputToken
+    params.amount,          // inputAmount
+    quote.outputAmount,     // outputAmount
+    params.destinationChain, // destinationChainId
+    ADDRESS_ZERO,           // exclusiveRelayer
+    quote.timestamp,        // quoteTimestamp
+    quote.fillDeadline,     // fillDeadline
+    0,                      // exclusivityDeadline
+    '0x'                    // message
+  );
+}
+```
+
+## Flujo Completo de Intents
+
+### Intent de Lend (Sin Bridge)
+
+```
+Usuario tiene USDC en Arbitrum, quiere depositar
+
+1. Pan verifica balance en Arbitrum ✓
+2. Pan deposita en Aave Arbitrum
+   └─ approve USDC → Aave Pool
+   └─ supply USDC → recibe aUSDC
+3. Intent completado
+```
+
+### Intent de Lend (Con Bridge)
+
+```
+Usuario tiene USDC en Base, quiere depositar en Arbitrum
+
+1. Pan verifica balance en Base ✓
+2. Pan ejecuta bridge Base → Arbitrum
+   └─ approve USDC → Across SpokePool
+   └─ depositV3 → Across
+   └─ [espera] Relayer entrega en Arbitrum
+3. Pan deposita en Aave Arbitrum
+   └─ approve USDC → Aave Pool
+   └─ supply USDC → recibe aUSDC
+4. Intent completado
+```
+
+### Intent de Lend (Multi-Bridge)
+
+```
+Usuario tiene USDC distribuido en Ethereum + Base
+
+1. Pan analiza balances
+   └─ Ethereum: 500 USDC
+   └─ Base: 500 USDC
+2. Pan ejecuta bridges en paralelo
+   └─ Bridge 1: Ethereum → Arbitrum (500 USDC)
+   └─ Bridge 2: Base → Arbitrum (500 USDC)
+3. Pan espera ambos bridges
+4. Pan deposita 1000 USDC en Aave Arbitrum
+5. Intent completado
+```
+
+## Seguridad General
+
+### Riesgos y Mitigaciones
+
+| Riesgo | Mitigacion |
+|--------|------------|
+| Bug en Aave | Auditorias extensivas, bug bounties |
+| Bug en Across | Oracle UMA, disputa window |
+| Hack de bridge | Limite de liquidez, monitoring |
+| Depeg de USDC | Circle regulado, reservas auditadas |
+| Smart contract risk | Non-custodial, user owns keys |
+
+### Pan NO Tiene Acceso A
+
+- Tus claves privadas (custodial por Privy)
+- Tus fondos directamente (todo via contratos publicos)
+- Capacidad de mover fondos sin tu permiso
+
+### Contratos Verificados
+
+Todos los contratos que Pan utiliza estan:
+- Verificados en Etherscan/Arbiscan/Basescan
+- Open source
+- Auditados multiples veces
+
+## Proximos Protocolos
+
+<Info>
+Estamos evaluando integrar:
+- **Compound V3** - Alternativa a Aave
+- **Morpho** - Optimizador de yields
+- **Stargate** - Bridge adicional
+- **Lido** - ETH staking
+</Info>
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Puedo elegir el protocolo de yield?">
+    Actualmente Pan usa Aave V3 en todas las chains.
+    En el futuro agregaremos opciones para elegir protocolo.
+  </Accordion>
+
+  <Accordion title="Que pasa si Aave es hackeado?">
+    Aave tiene uno de los mejores track records en DeFi con $10B+ en TVL
+    y 5+ anos sin incidentes mayores. Sin embargo, siempre existe riesgo
+    de smart contract. Pan no puede proteger contra bugs en protocolos
+    subyacentes.
+  </Accordion>
+
+  <Accordion title="Puedo usar otro bridge?">
+    Actualmente Pan usa exclusivamente Across Protocol por su velocidad
+    y seguridad. Los fondos se mueven via contratos verificados y
+    auditados de Across.
+  </Accordion>
+
+  <Accordion title="Mis fondos estan asegurados?">
+    Pan no ofrece seguro de fondos. Los protocolos subyacentes (Aave, Across)
+    tienen sus propios mecanismos de seguridad pero no garantias.
+    Considera usar protocolos de seguro DeFi como Nexus Mutual si deseas
+    cobertura adicional.
+  </Accordion>
+</AccordionGroup>

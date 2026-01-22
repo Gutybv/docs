@@ -1,0 +1,192 @@
+---
+title: "Balances (SDK)"
+description: "Consultar balances con el SDK"
+---
+
+## Obtener Balances
+
+```typescript
+const balances = await pan.wallet.getBalances('pan_wallet_abc123');
+
+console.log('Total USD:', balances.totalUsdValue);
+console.log('Address:', balances.address);
+```
+
+## Estructura de Respuesta
+
+```typescript
+interface Balances {
+  walletId: string;
+  address: string;
+  balances: Record<string, TokenBalance[]>;
+  totalUsdValue: number;
+  updatedAt: string;
+}
+
+interface TokenBalance {
+  symbol: string;
+  address: string;
+  balance: string;          // En unidades minimas
+  balanceFormatted: string; // Con decimales
+  decimals: number;
+  usdValue: number;
+}
+```
+
+## Iterar Balances
+
+```typescript
+const { balances } = await pan.wallet.getBalances(walletId);
+
+for (const [chain, tokens] of Object.entries(balances)) {
+  console.log(`\n${chain}:`);
+  for (const token of tokens) {
+    if (parseFloat(token.balanceFormatted) > 0) {
+      console.log(`  ${token.balanceFormatted} ${token.symbol} ($${token.usdValue})`);
+    }
+  }
+}
+```
+
+## Helpers Utiles
+
+### Total de un Asset
+
+```typescript
+function getAssetTotal(balances: Balances, symbol: string): number {
+  let total = 0;
+
+  for (const tokens of Object.values(balances.balances)) {
+    const token = tokens.find(t => t.symbol === symbol);
+    if (token) {
+      total += parseFloat(token.balanceFormatted);
+    }
+  }
+
+  return total;
+}
+
+const totalUsdc = getAssetTotal(balances, 'USDC');
+```
+
+### Balances por Asset
+
+```typescript
+function getBalancesByAsset(balances: Balances): Record<string, {
+  total: number;
+  totalUsd: number;
+  chains: { chain: string; amount: number; usd: number }[];
+}> {
+  const result: Record<string, any> = {};
+
+  for (const [chain, tokens] of Object.entries(balances.balances)) {
+    for (const token of tokens) {
+      if (!result[token.symbol]) {
+        result[token.symbol] = { total: 0, totalUsd: 0, chains: [] };
+      }
+
+      const amount = parseFloat(token.balanceFormatted);
+      result[token.symbol].total += amount;
+      result[token.symbol].totalUsd += token.usdValue;
+      result[token.symbol].chains.push({
+        chain,
+        amount,
+        usd: token.usdValue
+      });
+    }
+  }
+
+  return result;
+}
+```
+
+### Verificar Fondos
+
+```typescript
+function hasFunds(balances: Balances, symbol: string, required: number): boolean {
+  return getAssetTotal(balances, symbol) >= required;
+}
+
+if (!hasFunds(balances, 'USDC', 1000)) {
+  throw new Error('Fondos insuficientes');
+}
+```
+
+## Hook de React
+
+```typescript
+import { useState, useEffect, useCallback } from 'react';
+import { usePan } from './usePan';
+import type { Balances } from '@pan/sdk';
+
+interface UseBalancesOptions {
+  autoRefresh?: boolean;
+  refreshInterval?: number;
+}
+
+export function useBalances(walletId: string, options: UseBalancesOptions = {}) {
+  const { autoRefresh = false, refreshInterval = 30000 } = options;
+  const pan = usePan();
+
+  const [balances, setBalances] = useState<Balances | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetch = useCallback(async () => {
+    try {
+      const data = await pan.wallet.getBalances(walletId);
+      setBalances(data);
+      setError(null);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [pan, walletId]);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const timer = setInterval(fetch, refreshInterval);
+    return () => clearInterval(timer);
+  }, [autoRefresh, refreshInterval, fetch]);
+
+  const getTotal = (symbol: string) => {
+    if (!balances) return 0;
+    return getAssetTotal(balances, symbol);
+  };
+
+  return {
+    balances,
+    loading,
+    error,
+    refresh: fetch,
+    getTotal,
+    totalUsd: balances?.totalUsdValue || 0
+  };
+}
+```
+
+```tsx
+// Uso
+function BalanceDisplay({ walletId }) {
+  const { balances, loading, totalUsd, getTotal, refresh } = useBalances(walletId, {
+    autoRefresh: true,
+    refreshInterval: 60000
+  });
+
+  if (loading) return <div>Cargando...</div>;
+
+  return (
+    <div>
+      <h3>Total: ${totalUsd.toFixed(2)}</h3>
+      <p>USDC: {getTotal('USDC').toFixed(2)}</p>
+      <button onClick={refresh}>Actualizar</button>
+    </div>
+  );
+}
+```

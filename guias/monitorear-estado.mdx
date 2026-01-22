@@ -1,0 +1,497 @@
+---
+title: "Monitorear Estado"
+description: "Como hacer seguimiento de intents y transacciones"
+---
+
+Esta guia cubre las mejores practicas para monitorear el estado de intents, mostrar progreso a usuarios, y manejar diferentes escenarios.
+
+## Consulta Basica de Estado
+
+<CodeGroup>
+```javascript JavaScript
+const intent = await pan.getIntent('intent_xyz789');
+
+console.log('Estado:', intent.status);
+console.log('Plan:', intent.executionPlan);
+console.log('Resultados:', intent.results);
+```
+
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/intents/intent_xyz789" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+</CodeGroup>
+
+## Estados de un Intent
+
+```
+pending → planning → executing → completed
+                          ↓
+                       failed
+```
+
+| Estado | Descripcion | Duracion tipica |
+|--------|-------------|-----------------|
+| `pending` | Creado, esperando procesamiento | < 1 segundo |
+| `planning` | Analizando y generando plan | 2-5 segundos |
+| `executing` | Ejecutando transacciones | 1-10 minutos |
+| `completed` | Todas las operaciones exitosas | - |
+| `failed` | Error durante ejecucion | - |
+
+## Polling Basico
+
+```javascript
+async function esperarIntent(intentId, options = {}) {
+  const {
+    intervalo = 5000,
+    timeout = 600000, // 10 minutos
+    onProgress = () => {}
+  } = options;
+
+  const inicio = Date.now();
+
+  while (true) {
+    // Verificar timeout
+    if (Date.now() - inicio > timeout) {
+      throw new Error('Timeout esperando intent');
+    }
+
+    // Obtener estado actual
+    const intent = await pan.getIntent(intentId);
+
+    // Notificar progreso
+    onProgress(intent);
+
+    // Verificar estados finales
+    if (intent.status === 'completed') {
+      return intent;
+    }
+
+    if (intent.status === 'failed') {
+      throw new IntentError(intent.error);
+    }
+
+    // Esperar antes de siguiente consulta
+    await new Promise(r => setTimeout(r, intervalo));
+  }
+}
+
+// Uso basico
+const resultado = await esperarIntent('intent_xyz789');
+
+// Con callback de progreso
+const resultado = await esperarIntent('intent_xyz789', {
+  onProgress: (intent) => {
+    console.log(`Estado: ${intent.status}`);
+  }
+});
+```
+
+## Monitoreo con Progreso Detallado
+
+```javascript
+class IntentTracker {
+  constructor(intentId) {
+    this.intentId = intentId;
+    this.listeners = {
+      status: [],
+      step: [],
+      transaction: [],
+      error: [],
+      complete: []
+    };
+    this.lastState = null;
+  }
+
+  on(event, callback) {
+    this.listeners[event].push(callback);
+    return this;
+  }
+
+  emit(event, data) {
+    this.listeners[event].forEach(cb => cb(data));
+  }
+
+  async track() {
+    while (true) {
+      const intent = await pan.getIntent(this.intentId);
+
+      // Detectar cambio de estado
+      if (intent.status !== this.lastState?.status) {
+        this.emit('status', {
+          from: this.lastState?.status,
+          to: intent.status,
+          intent
+        });
+      }
+
+      // Detectar pasos completados
+      const lastCompleted = this.lastState?.results?.completedSteps || 0;
+      const currentCompleted = intent.results?.completedSteps || 0;
+
+      if (currentCompleted > lastCompleted) {
+        for (let i = lastCompleted; i < currentCompleted; i++) {
+          const step = intent.executionPlan.steps[i];
+          const tx = intent.results.transactions[i];
+
+          this.emit('step', { step, tx, index: i });
+          this.emit('transaction', tx);
+        }
+      }
+
+      // Estados finales
+      if (intent.status === 'completed') {
+        this.emit('complete', intent);
+        return intent;
+      }
+
+      if (intent.status === 'failed') {
+        this.emit('error', intent.error);
+        throw new IntentError(intent.error);
+      }
+
+      this.lastState = intent;
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+}
+
+// Uso
+const tracker = new IntentTracker('intent_xyz789');
+
+tracker
+  .on('status', ({ from, to }) => {
+    console.log(`Estado: ${from} → ${to}`);
+  })
+  .on('step', ({ step, tx, index }) => {
+    console.log(`Paso ${index + 1} completado: ${step.type}`);
+    console.log(`  TX: ${tx.txHash}`);
+  })
+  .on('complete', (intent) => {
+    console.log('Completado!');
+    console.log(`Gas total: $${intent.results.totalGasCostUsd}`);
+  })
+  .on('error', (error) => {
+    console.error('Error:', error.message);
+  });
+
+await tracker.track();
+```
+
+## Componente React de Progreso
+
+```jsx
+import { useState, useEffect, useCallback } from 'react';
+
+function IntentProgress({ intentId, onComplete, onError }) {
+  const [intent, setIntent] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchIntent = useCallback(async () => {
+    try {
+      const data = await pan.getIntent(intentId);
+      setIntent(data);
+
+      if (data.status === 'completed') {
+        onComplete?.(data);
+      } else if (data.status === 'failed') {
+        onError?.(data.error);
+      }
+
+      return data;
+    } catch (err) {
+      onError?.(err);
+      throw err;
+    }
+  }, [intentId, onComplete, onError]);
+
+  useEffect(() => {
+    let mounted = true;
+    let timer;
+
+    const poll = async () => {
+      if (!mounted) return;
+
+      const data = await fetchIntent();
+      setLoading(false);
+
+      if (data.status !== 'completed' && data.status !== 'failed') {
+        timer = setTimeout(poll, 5000);
+      }
+    };
+
+    poll();
+
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
+  }, [fetchIntent]);
+
+  if (loading) {
+    return <div className="loading">Cargando...</div>;
+  }
+
+  const progreso = calcularProgreso(intent);
+  const pasoActual = getPasoActual(intent);
+
+  return (
+    <div className="intent-progress">
+      <StatusBadge status={intent.status} />
+
+      <ProgressBar value={progreso} />
+
+      {pasoActual && (
+        <div className="current-step">
+          <StepIcon type={pasoActual.type} />
+          <span>{getStepMessage(pasoActual)}</span>
+        </div>
+      )}
+
+      {intent.executionPlan && (
+        <StepsList
+          steps={intent.executionPlan.steps}
+          completedSteps={intent.results?.completedSteps || 0}
+          transactions={intent.results?.transactions || []}
+        />
+      )}
+
+      {intent.status === 'completed' && (
+        <ResultsSummary results={intent.results} />
+      )}
+
+      {intent.status === 'failed' && (
+        <ErrorDisplay error={intent.error} />
+      )}
+    </div>
+  );
+}
+
+function calcularProgreso(intent) {
+  if (!intent) return 0;
+  if (intent.status === 'pending') return 5;
+  if (intent.status === 'planning') return 10;
+  if (intent.status === 'completed') return 100;
+  if (intent.status === 'failed') return 100;
+
+  if (!intent.executionPlan) return 15;
+
+  const total = intent.executionPlan.steps.length;
+  const completados = intent.results?.completedSteps || 0;
+
+  return Math.round(15 + (completados / total) * 80);
+}
+
+function getPasoActual(intent) {
+  if (!intent?.executionPlan) return null;
+  const completados = intent.results?.completedSteps || 0;
+  return intent.executionPlan.steps[completados];
+}
+
+function getStepMessage(step) {
+  const mensajes = {
+    bridge: `Transfiriendo a ${step.to}...`,
+    deposit: `Depositando en ${step.protocol}...`,
+    withdraw: `Retirando de ${step.protocol}...`,
+    swap: `Intercambiando tokens...`
+  };
+  return mensajes[step.type] || 'Procesando...';
+}
+
+function StepsList({ steps, completedSteps, transactions }) {
+  return (
+    <div className="steps-list">
+      {steps.map((step, i) => {
+        const estado = i < completedSteps ? 'completed' :
+                      i === completedSteps ? 'current' : 'pending';
+        const tx = transactions[i];
+
+        return (
+          <div key={i} className={`step ${estado}`}>
+            <StepIcon type={step.type} estado={estado} />
+            <div className="step-info">
+              <span className="step-name">{step.type}</span>
+              {tx && (
+                <a
+                  href={getExplorerUrl(step.chain || step.from, tx.txHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="tx-link"
+                >
+                  Ver TX
+                </a>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ResultsSummary({ results }) {
+  return (
+    <div className="results-summary">
+      <h4>Completado</h4>
+      <div className="result-row">
+        <span>Monto final:</span>
+        <span>{results.finalAmount} USDC</span>
+      </div>
+      <div className="result-row">
+        <span>APY:</span>
+        <span>{results.apy}%</span>
+      </div>
+      <div className="result-row">
+        <span>Gas total:</span>
+        <span>${results.totalGasCostUsd.toFixed(2)}</span>
+      </div>
+    </div>
+  );
+}
+```
+
+## Verificar Transacciones On-chain
+
+```javascript
+const explorers = {
+  'ethereum': 'https://etherscan.io/tx/',
+  'ethereum-sepolia': 'https://sepolia.etherscan.io/tx/',
+  'arbitrum': 'https://arbiscan.io/tx/',
+  'arbitrum-sepolia': 'https://sepolia.arbiscan.io/tx/',
+  'base': 'https://basescan.org/tx/',
+  'base-sepolia': 'https://sepolia.basescan.org/tx/'
+};
+
+function getExplorerUrl(chain, txHash) {
+  const base = explorers[chain];
+  return base ? `${base}${txHash}` : null;
+}
+
+// Mostrar transacciones del intent
+function mostrarTransacciones(intent) {
+  if (!intent.results?.transactions) {
+    console.log('Sin transacciones aun');
+    return;
+  }
+
+  console.log('\nTransacciones:');
+  intent.results.transactions.forEach((tx, i) => {
+    console.log(`\n${i + 1}. ${tx.type}`);
+    console.log(`   Chain: ${tx.chain}`);
+    console.log(`   TX: ${tx.txHash}`);
+    console.log(`   Gas: ${tx.gasUsed} ($${tx.gasCostUsd})`);
+    console.log(`   Explorer: ${getExplorerUrl(tx.chain, tx.txHash)}`);
+  });
+}
+```
+
+## Notificaciones
+
+```javascript
+async function monitorearConNotificaciones(intentId, notificar) {
+  const intent = await pan.getIntent(intentId);
+
+  if (intent.status === 'completed') {
+    await notificar({
+      tipo: 'exito',
+      titulo: 'Operacion completada',
+      mensaje: `Tu deposito de ${intent.amount} ${intent.asset} fue exitoso`,
+      datos: {
+        apy: intent.results.apy,
+        txHash: intent.results.transactions.at(-1)?.txHash
+      }
+    });
+    return intent;
+  }
+
+  if (intent.status === 'failed') {
+    await notificar({
+      tipo: 'error',
+      titulo: 'Operacion fallida',
+      mensaje: intent.error.message,
+      datos: {
+        codigo: intent.error.code,
+        detalles: intent.error.details
+      }
+    });
+    return intent;
+  }
+
+  // Notificar progreso cada N segundos
+  const progreso = calcularProgreso(intent);
+  await notificar({
+    tipo: 'progreso',
+    titulo: 'En progreso',
+    mensaje: `${progreso}% completado`,
+    datos: { progreso, status: intent.status }
+  });
+
+  // Continuar monitoreando
+  await new Promise(r => setTimeout(r, 15000));
+  return monitorearConNotificaciones(intentId, notificar);
+}
+
+// Ejemplo con diferentes canales
+const notificadores = {
+  async push(n) {
+    // Enviar push notification
+    await pushService.send(userId, n);
+  },
+
+  async email(n) {
+    // Solo para completados/fallidos
+    if (n.tipo === 'progreso') return;
+    await emailService.send(userEmail, n);
+  },
+
+  async webhook(n) {
+    // Enviar a webhook del cliente
+    await fetch(webhookUrl, {
+      method: 'POST',
+      body: JSON.stringify(n)
+    });
+  }
+};
+
+// Usar
+await monitorearConNotificaciones(intentId, async (n) => {
+  await Promise.all([
+    notificadores.push(n),
+    notificadores.email(n),
+    notificadores.webhook(n)
+  ]);
+});
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Manejo de Errores"
+    icon="exclamation-triangle"
+    href="/guias/mejores-practicas/manejo-errores"
+  >
+    Como manejar errores correctamente
+  </Card>
+  <Card
+    title="Rendimiento"
+    icon="bolt"
+    href="/guias/mejores-practicas/rendimiento"
+  >
+    Optimizar polling y consultas
+  </Card>
+  <Card
+    title="API de Intents"
+    icon="terminal"
+    href="/api/intents/obtener-intent"
+  >
+    Referencia del endpoint
+  </Card>
+  <Card
+    title="Integracion"
+    icon="puzzle-piece"
+    href="/guias/mejores-practicas/integracion"
+  >
+    Patrones de integracion
+  </Card>
+</CardGroup>

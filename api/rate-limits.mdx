@@ -1,0 +1,182 @@
+---
+title: "Rate Limits"
+description: "Limites de uso y como manejarlos"
+---
+
+## Limites por Plan
+
+| Plan | Requests/minuto | Wallets | Creditos/mes |
+|------|-----------------|---------|--------------|
+| Free | 100 | 100 | 100 |
+| Pro | 1,000 | 10,000 | 10,000 |
+| Enterprise | Custom | Ilimitadas | Custom |
+
+## Headers de Rate Limit
+
+Cada respuesta incluye headers informativos:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1642248000
+```
+
+| Header | Descripcion |
+|--------|-------------|
+| `X-RateLimit-Limit` | Maximo requests por minuto |
+| `X-RateLimit-Remaining` | Requests restantes en ventana actual |
+| `X-RateLimit-Reset` | Timestamp Unix cuando se reinicia |
+
+## Respuesta 429
+
+Cuando excedes el limite:
+
+```json
+{
+  "error": "RATE_LIMITED",
+  "message": "Too many requests",
+  "details": {
+    "limit": 100,
+    "window": "1 minute",
+    "retryAfter": 45
+  }
+}
+```
+
+**Headers adicionales:**
+```
+Retry-After: 45
+```
+
+## Manejo Recomendado
+
+### Backoff Exponencial
+
+```javascript
+async function requestConBackoff(fn, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.status !== 429) throw error;
+
+      const wait = Math.pow(2, i) * 1000; // 1s, 2s, 4s
+      console.log(`Rate limited. Esperando ${wait}ms...`);
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+```
+
+### Usar Retry-After
+
+```javascript
+async function request(url, options) {
+  const response = await fetch(url, options);
+
+  if (response.status === 429) {
+    const retryAfter = response.headers.get('Retry-After');
+    const wait = parseInt(retryAfter) * 1000;
+
+    console.log(`Rate limited. Retry after ${retryAfter}s`);
+    await new Promise(r => setTimeout(r, wait));
+
+    return request(url, options);
+  }
+
+  return response;
+}
+```
+
+### Rate Limiter Local
+
+```javascript
+class RateLimiter {
+  constructor(maxRequests, windowMs) {
+    this.maxRequests = maxRequests;
+    this.windowMs = windowMs;
+    this.requests = [];
+  }
+
+  async acquire() {
+    const now = Date.now();
+
+    // Limpiar requests viejos
+    this.requests = this.requests.filter(
+      t => now - t < this.windowMs
+    );
+
+    // Verificar limite
+    if (this.requests.length >= this.maxRequests) {
+      const oldestRequest = this.requests[0];
+      const waitTime = this.windowMs - (now - oldestRequest);
+      await new Promise(r => setTimeout(r, waitTime));
+      return this.acquire();
+    }
+
+    this.requests.push(now);
+  }
+}
+
+// Uso
+const limiter = new RateLimiter(100, 60000); // 100/min
+
+async function makeRequest() {
+  await limiter.acquire();
+  return fetch('https://api.pan.dev/v1/yields', { ... });
+}
+```
+
+## Creditos
+
+Ademas del rate limit, cada request consume creditos:
+
+| Endpoint | Creditos |
+|----------|----------|
+| POST /wallets | 1 |
+| GET /wallets/:id | 1 |
+| GET /balances/:id | 1 |
+| GET /yields | 1 |
+| POST /intents | 5 |
+| GET /intents/:id | 1 |
+
+### Verificar Creditos
+
+```bash
+curl https://api.pan.dev/dashboard/credits \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+
+```json
+{
+  "balance": 8750,
+  "totalPurchased": 10000,
+  "totalUsed": 1250,
+  "plan": "pro"
+}
+```
+
+## Optimizar Uso
+
+1. **Cache respuestas de yields** - APYs no cambian cada segundo
+2. **Batch requests** - Agrupa operaciones cuando sea posible
+3. **Polling inteligente** - Usa 5-10 segundos, no menos
+4. **Almacena walletIds** - No consultes si ya los tienes
+
+```javascript
+// Cache de yields
+let yieldsCache = null;
+let yieldsCacheTime = 0;
+
+async function getYields() {
+  const now = Date.now();
+  if (yieldsCache && now - yieldsCacheTime < 60000) {
+    return yieldsCache;
+  }
+
+  yieldsCache = await pan.yields.getAll();
+  yieldsCacheTime = now;
+  return yieldsCache;
+}
+```

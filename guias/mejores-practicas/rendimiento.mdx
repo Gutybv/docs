@@ -1,0 +1,247 @@
+---
+title: "Rendimiento"
+description: "Optimizar el uso de Pan API"
+---
+
+## Cache de Yields
+
+Los APYs no cambian cada segundo. Cachea la respuesta:
+
+```typescript
+let yieldsCache: YieldsResponse | null = null;
+let yieldsCacheTime = 0;
+const CACHE_TTL = 60000; // 1 minuto
+
+async function getYields(): Promise<YieldsResponse> {
+  const now = Date.now();
+
+  if (yieldsCache && now - yieldsCacheTime < CACHE_TTL) {
+    return yieldsCache;
+  }
+
+  yieldsCache = await pan.yields.getAll();
+  yieldsCacheTime = now;
+  return yieldsCache;
+}
+```
+
+## Polling Eficiente
+
+### Intervalo Optimo
+
+| Operacion | Intervalo Recomendado |
+|-----------|----------------------|
+| Intent en ejecucion | 5-10 segundos |
+| Balances (monitoreo) | 30-60 segundos |
+| Yields | 5-10 minutos |
+
+### Polling Adaptativo
+
+```typescript
+async function pollIntent(intentId: string) {
+  let intervalo = 5000; // Empezar con 5s
+
+  while (true) {
+    const intent = await pan.getIntent(intentId);
+
+    if (intent.status === 'completed' || intent.status === 'failed') {
+      return intent;
+    }
+
+    await new Promise(r => setTimeout(r, intervalo));
+
+    // Aumentar intervalo gradualmente (max 30s)
+    intervalo = Math.min(intervalo * 1.5, 30000);
+  }
+}
+```
+
+### Deteccion de Cambios
+
+```typescript
+class BalanceWatcher {
+  private lastHash: string | null = null;
+
+  async check(walletId: string, onChange: (b: Balances) => void) {
+    const balances = await pan.wallet.getBalances(walletId);
+    const hash = JSON.stringify(balances.balances);
+
+    if (hash !== this.lastHash) {
+      this.lastHash = hash;
+      onChange(balances);
+    }
+  }
+}
+
+// Solo notifica cuando hay cambios
+const watcher = new BalanceWatcher();
+setInterval(() => watcher.check(walletId, actualizarUI), 30000);
+```
+
+## Requests en Paralelo
+
+```typescript
+// MAL: Secuencial
+const wallet = await pan.wallet.get(userId);
+const balances = await pan.wallet.getBalances(wallet.id);
+const yields = await pan.yields.getAll();
+
+// BIEN: Paralelo
+const [wallet, yields] = await Promise.all([
+  pan.wallet.get(userId),
+  pan.yields.getAll()
+]);
+
+// Balances depende de wallet
+const balances = await pan.wallet.getBalances(wallet.id);
+```
+
+## Evitar Requests Innecesarios
+
+### Almacenar IDs
+
+```typescript
+// Guardar walletId en tu DB
+const user = await db.users.findOne({ id: userId });
+
+if (user.panWalletId) {
+  // Usar ID guardado, no necesitas GET
+  const balances = await pan.wallet.getBalances(user.panWalletId);
+}
+```
+
+### Verificar Antes de Crear
+
+```typescript
+async function ensureWallet(userId: string) {
+  // Verificar en tu DB primero
+  const user = await db.users.findOne({ id: userId });
+
+  if (user?.panWalletId) {
+    return { id: user.panWalletId, address: user.panWalletAddress };
+  }
+
+  // Solo crear si no existe
+  const wallet = await pan.wallet.create({ userId });
+
+  await db.users.update(userId, {
+    panWalletId: wallet.id,
+    panWalletAddress: wallet.address
+  });
+
+  return wallet;
+}
+```
+
+## Debounce en UI
+
+```typescript
+import { useMemo } from 'react';
+import debounce from 'lodash/debounce';
+
+function BalanceRefresh({ walletId }) {
+  const refresh = useMemo(
+    () => debounce(async () => {
+      const balances = await pan.wallet.getBalances(walletId);
+      setBalances(balances);
+    }, 1000),
+    [walletId]
+  );
+
+  return <button onClick={refresh}>Actualizar</button>;
+}
+```
+
+## Precargar Datos
+
+```typescript
+// Precargar yields al inicio de la app
+let yieldsPromise: Promise<YieldsResponse> | null = null;
+
+export function preloadYields() {
+  yieldsPromise = pan.yields.getAll();
+}
+
+export async function getYields() {
+  if (!yieldsPromise) {
+    preloadYields();
+  }
+  return yieldsPromise!;
+}
+
+// En inicio de app
+preloadYields();
+```
+
+## Optimizar Consultas de Balance
+
+```typescript
+// Si solo necesitas un chain especifico
+function getChainBalance(balances: Balances, chain: string, asset: string) {
+  const tokens = balances.balances[chain] || [];
+  const token = tokens.find(t => t.symbol === asset);
+  return token ? parseFloat(token.balanceFormatted) : 0;
+}
+
+// No consultes balances si solo necesitas verificar
+async function tieneUSDC(walletId: string, minimo: number): Promise<boolean> {
+  const balances = await pan.wallet.getBalances(walletId);
+
+  for (const tokens of Object.values(balances.balances)) {
+    const usdc = tokens.find(t => t.symbol === 'USDC');
+    if (usdc && parseFloat(usdc.balanceFormatted) >= minimo) {
+      return true;
+    }
+  }
+
+  return false;
+}
+```
+
+## Metricas de Uso
+
+```typescript
+class ApiMetrics {
+  private calls = new Map<string, number>();
+  private times = new Map<string, number[]>();
+
+  async track<T>(endpoint: string, fn: () => Promise<T>): Promise<T> {
+    const start = Date.now();
+
+    try {
+      return await fn();
+    } finally {
+      const duration = Date.now() - start;
+
+      this.calls.set(endpoint, (this.calls.get(endpoint) || 0) + 1);
+
+      const times = this.times.get(endpoint) || [];
+      times.push(duration);
+      this.times.set(endpoint, times.slice(-100)); // Ultimas 100
+    }
+  }
+
+  getStats() {
+    const stats: Record<string, { calls: number; avgMs: number }> = {};
+
+    for (const [endpoint, count] of this.calls) {
+      const times = this.times.get(endpoint) || [];
+      const avg = times.reduce((a, b) => a + b, 0) / times.length;
+
+      stats[endpoint] = { calls: count, avgMs: Math.round(avg) };
+    }
+
+    return stats;
+  }
+}
+
+// Uso
+const metrics = new ApiMetrics();
+
+const balances = await metrics.track('getBalances', () =>
+  pan.wallet.getBalances(walletId)
+);
+
+console.log(metrics.getStats());
+// { getBalances: { calls: 15, avgMs: 234 } }
+```

@@ -1,0 +1,420 @@
+---
+title: "Obtener Yields"
+description: "Como consultar APYs y oportunidades de rendimiento"
+---
+
+Pan agrega tasas de rendimiento (APY) de protocolos DeFi en multiples chains, permitiendote encontrar las mejores oportunidades automaticamente.
+
+## Consulta Basica
+
+<CodeGroup>
+```javascript JavaScript
+const yields = await pan.yields.getAll();
+
+console.log('Mejor APY:', yields.bestYield);
+console.log('Todos los yields:', yields.yields);
+```
+
+```python Python
+response = requests.get(
+    f'{BASE_URL}/yields',
+    headers=headers
+)
+yields = response.json()
+print(f"Mejor APY: {yields['bestYield']['apy']}%")
+```
+
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/yields" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+</CodeGroup>
+
+## Estructura de Respuesta
+
+```json
+{
+  "yields": [
+    {
+      "chain": "base",
+      "chainId": 8453,
+      "protocol": "aave",
+      "protocolVersion": "v3",
+      "asset": "USDC",
+      "assetAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "apy": 8.52,
+      "apyBase": 3.20,
+      "apyReward": 5.32,
+      "tvl": 15000000,
+      "riskLevel": "low",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    },
+    {
+      "chain": "arbitrum",
+      "chainId": 42161,
+      "protocol": "aave",
+      "protocolVersion": "v3",
+      "asset": "USDC",
+      "assetAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      "apy": 7.23,
+      "apyBase": 2.80,
+      "apyReward": 4.43,
+      "tvl": 25000000,
+      "riskLevel": "low",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    },
+    {
+      "chain": "ethereum",
+      "chainId": 1,
+      "protocol": "aave",
+      "protocolVersion": "v3",
+      "asset": "USDC",
+      "assetAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "apy": 5.15,
+      "apyBase": 2.10,
+      "apyReward": 3.05,
+      "tvl": 50000000,
+      "riskLevel": "low",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "bestYield": {
+    "chain": "base",
+    "protocol": "aave",
+    "asset": "USDC",
+    "apy": 8.52
+  },
+  "updatedAt": "2024-01-15T10:30:00Z"
+}
+```
+
+### Campos de Yield
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `chain` | string | Nombre de la chain |
+| `chainId` | number | ID numerico de la chain |
+| `protocol` | string | Protocolo DeFi |
+| `protocolVersion` | string | Version del protocolo |
+| `asset` | string | Token soportado |
+| `apy` | number | APY total (base + rewards) |
+| `apyBase` | number | APY base del protocolo |
+| `apyReward` | number | APY de recompensas adicionales |
+| `tvl` | number | Total Value Locked en USD |
+| `riskLevel` | string | Nivel de riesgo: `low`, `medium`, `high` |
+
+## Mostrar Yields al Usuario
+
+```javascript
+async function mostrarOportunidades() {
+  const { yields, bestYield } = await pan.yields.getAll();
+
+  console.log('\n=== Mejores Oportunidades de Rendimiento ===\n');
+
+  // Ordenar por APY descendente
+  const ordenados = [...yields].sort((a, b) => b.apy - a.apy);
+
+  ordenados.forEach((y, i) => {
+    const mejor = y.chain === bestYield.chain ? ' (MEJOR)' : '';
+    console.log(`${i + 1}. ${y.chain} - ${y.protocol}`);
+    console.log(`   APY: ${y.apy.toFixed(2)}%${mejor}`);
+    console.log(`   TVL: $${(y.tvl / 1000000).toFixed(1)}M`);
+    console.log(`   Riesgo: ${y.riskLevel}`);
+    console.log('');
+  });
+}
+```
+
+## Decidir Donde Depositar
+
+```javascript
+async function analizarMejorOpcion(walletId, amount) {
+  // 1. Obtener balances y yields
+  const [{ balances }, { yields, bestYield }] = await Promise.all([
+    pan.wallet.getBalances(walletId),
+    pan.yields.getAll()
+  ]);
+
+  // 2. Encontrar donde estan los fondos
+  const fuentes = [];
+  for (const [chain, tokens] of Object.entries(balances)) {
+    const usdc = tokens.find(t => t.symbol === 'USDC');
+    if (usdc && parseFloat(usdc.balanceFormatted) > 0) {
+      fuentes.push({
+        chain,
+        balance: parseFloat(usdc.balanceFormatted)
+      });
+    }
+  }
+
+  // 3. Calcular escenarios
+  console.log('\n=== Analisis de Opciones ===\n');
+
+  // Opcion A: Depositar donde estan los fondos (sin bridge)
+  for (const fuente of fuentes) {
+    const yieldLocal = yields.find(y => y.chain === fuente.chain);
+    if (yieldLocal) {
+      const gananciaAnual = fuente.balance * (yieldLocal.apy / 100);
+      console.log(`Sin bridge (${fuente.chain}):`);
+      console.log(`  APY: ${yieldLocal.apy}%`);
+      console.log(`  Ganancia anual estimada: $${gananciaAnual.toFixed(2)}`);
+      console.log('');
+    }
+  }
+
+  // Opcion B: Bridge al mejor APY
+  const gananciaOptima = amount * (bestYield.apy / 100);
+  console.log(`Con bridge a ${bestYield.chain}:`);
+  console.log(`  APY: ${bestYield.apy}%`);
+  console.log(`  Ganancia anual estimada: $${gananciaOptima.toFixed(2)}`);
+
+  // 4. Calcular si vale la pena el bridge
+  const apyLocal = yields.find(y => fuentes.some(f => f.chain === y.chain))?.apy || 0;
+  const diferenciaApy = bestYield.apy - apyLocal;
+  const gananciaExtraAnual = amount * (diferenciaApy / 100);
+
+  // Asumir costo de bridge ~$3
+  const costoBridge = 3;
+  const diasParaRecuperar = (costoBridge / gananciaExtraAnual) * 365;
+
+  console.log(`\nAnalisis:`);
+  console.log(`  Diferencia APY: ${diferenciaApy.toFixed(2)}%`);
+  console.log(`  Ganancia extra anual: $${gananciaExtraAnual.toFixed(2)}`);
+  console.log(`  Dias para recuperar costo de bridge: ${diasParaRecuperar.toFixed(0)}`);
+
+  if (diasParaRecuperar < 30) {
+    console.log(`  Recomendacion: Bridge a ${bestYield.chain}`);
+    return { action: 'bridge', target: bestYield.chain };
+  } else {
+    console.log(`  Recomendacion: Depositar localmente`);
+    return { action: 'local', target: fuentes[0]?.chain };
+  }
+}
+```
+
+## Componente React de Yields
+
+```jsx
+import { useState, useEffect } from 'react';
+
+function YieldsTable() {
+  const [yields, setYields] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function cargar() {
+      const data = await pan.yields.getAll();
+      setYields(data);
+      setLoading(false);
+    }
+    cargar();
+  }, []);
+
+  if (loading) return <div>Cargando yields...</div>;
+
+  return (
+    <div className="yields-table">
+      <h3>Oportunidades de Rendimiento</h3>
+
+      <div className="best-yield">
+        <span>Mejor APY:</span>
+        <span className="apy">{yields.bestYield.apy.toFixed(2)}%</span>
+        <span className="chain">en {yields.bestYield.chain}</span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Chain</th>
+            <th>Protocolo</th>
+            <th>APY</th>
+            <th>TVL</th>
+            <th>Riesgo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {yields.yields
+            .sort((a, b) => b.apy - a.apy)
+            .map((y) => (
+              <tr
+                key={`${y.chain}-${y.protocol}`}
+                className={y.chain === yields.bestYield.chain ? 'best' : ''}
+              >
+                <td>
+                  <ChainIcon chain={y.chain} />
+                  {y.chain}
+                </td>
+                <td>
+                  <ProtocolIcon protocol={y.protocol} />
+                  {y.protocol}
+                </td>
+                <td className="apy">
+                  {y.apy.toFixed(2)}%
+                  <div className="breakdown">
+                    <span>Base: {y.apyBase.toFixed(2)}%</span>
+                    <span>Reward: {y.apyReward.toFixed(2)}%</span>
+                  </div>
+                </td>
+                <td>${(y.tvl / 1000000).toFixed(1)}M</td>
+                <td>
+                  <RiskBadge level={y.riskLevel} />
+                </td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+
+      <div className="updated">
+        Actualizado: {new Date(yields.updatedAt).toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+function RiskBadge({ level }) {
+  const colors = {
+    low: 'green',
+    medium: 'yellow',
+    high: 'red'
+  };
+
+  const labels = {
+    low: 'Bajo',
+    medium: 'Medio',
+    high: 'Alto'
+  };
+
+  return (
+    <span className={`risk-badge ${colors[level]}`}>
+      {labels[level]}
+    </span>
+  );
+}
+```
+
+## Calcular Ganancias Estimadas
+
+```javascript
+function calcularGanancias(monto, apy, periodos = [30, 90, 365]) {
+  const tasaDiaria = apy / 365 / 100;
+
+  return periodos.map(dias => {
+    // Interes compuesto diario
+    const montoFinal = monto * Math.pow(1 + tasaDiaria, dias);
+    const ganancia = montoFinal - monto;
+
+    return {
+      dias,
+      periodo: dias === 30 ? '1 mes' : dias === 90 ? '3 meses' : '1 año',
+      montoFinal: montoFinal.toFixed(2),
+      ganancia: ganancia.toFixed(2),
+      porcentaje: ((ganancia / monto) * 100).toFixed(2)
+    };
+  });
+}
+
+// Uso
+const ganancias = calcularGanancias(1000, 8.52);
+console.log(ganancias);
+// [
+//   { dias: 30, periodo: '1 mes', montoFinal: '1006.97', ganancia: '6.97', porcentaje: '0.70' },
+//   { dias: 90, periodo: '3 meses', montoFinal: '1021.12', ganancia: '21.12', porcentaje: '2.11' },
+//   { dias: 365, periodo: '1 año', montoFinal: '1088.97', ganancia: '88.97', porcentaje: '8.90' }
+// ]
+```
+
+## Alertas de APY
+
+```javascript
+class YieldMonitor {
+  constructor(minApy) {
+    this.minApy = minApy;
+    this.lastBestApy = null;
+  }
+
+  async check() {
+    const { bestYield } = await pan.yields.getAll();
+
+    const alerts = [];
+
+    // Alerta si APY supera umbral
+    if (bestYield.apy >= this.minApy) {
+      alerts.push({
+        type: 'high_apy',
+        message: `APY de ${bestYield.apy}% disponible en ${bestYield.chain}`,
+        yield: bestYield
+      });
+    }
+
+    // Alerta si APY cambio significativamente
+    if (this.lastBestApy) {
+      const cambio = bestYield.apy - this.lastBestApy;
+      if (Math.abs(cambio) > 1) {
+        alerts.push({
+          type: 'apy_change',
+          message: `APY ${cambio > 0 ? 'subio' : 'bajo'} ${Math.abs(cambio).toFixed(2)}%`,
+          from: this.lastBestApy,
+          to: bestYield.apy
+        });
+      }
+    }
+
+    this.lastBestApy = bestYield.apy;
+    return alerts;
+  }
+
+  async startMonitoring(intervalMs = 300000, onAlert) {
+    // Check inicial
+    const alerts = await this.check();
+    if (alerts.length) onAlert(alerts);
+
+    // Monitoreo periodico
+    setInterval(async () => {
+      const alerts = await this.check();
+      if (alerts.length) onAlert(alerts);
+    }, intervalMs);
+  }
+}
+
+// Uso
+const monitor = new YieldMonitor(8.0);
+monitor.startMonitoring(300000, (alerts) => {
+  alerts.forEach(alert => {
+    console.log(`[ALERTA] ${alert.message}`);
+    // Enviar notificacion, email, etc.
+  });
+});
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Ejecutar Intents"
+    icon="target"
+    href="/guias/ejecutar-intents"
+  >
+    Depositar en los mejores yields
+  </Card>
+  <Card
+    title="Monitorear Estado"
+    icon="chart-line"
+    href="/guias/monitorear-estado"
+  >
+    Seguir tus depositos
+  </Card>
+  <Card
+    title="API de Yields"
+    icon="terminal"
+    href="/api/yields/obtener-yields"
+  >
+    Referencia del endpoint
+  </Card>
+  <Card
+    title="Protocolos"
+    icon="cubes"
+    href="/redes/protocolos"
+  >
+    Protocolos soportados
+  </Card>
+</CardGroup>

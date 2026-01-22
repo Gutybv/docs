@@ -1,0 +1,201 @@
+---
+title: "Obtener Intent"
+description: "GET /v1/intents/:intentId"
+---
+
+Obtiene el estado y detalles de un intent.
+
+## Endpoint
+
+```
+GET https://api.pan.dev/v1/intents/:intentId
+```
+
+## Autenticacion
+
+API Key o X402
+
+## Parametros de URL
+
+| Parametro | Tipo | Descripcion |
+|-----------|------|-------------|
+| `intentId` | string | ID del intent |
+
+## Response
+
+### 200 OK - Ejecutando
+
+```json
+{
+  "id": "intent_xyz789abc123",
+  "walletId": "pan_wallet_abc123",
+  "status": "executing",
+  "action": "lend",
+  "amount": 1000,
+  "asset": "USDC",
+  "executionPlan": {
+    "strategy": "single-bridge",
+    "steps": [
+      {
+        "type": "bridge",
+        "sequence": 1,
+        "from": "arbitrum",
+        "to": "base",
+        "status": "completed"
+      },
+      {
+        "type": "deposit",
+        "sequence": 2,
+        "chain": "base",
+        "protocol": "aave",
+        "status": "executing"
+      }
+    ]
+  },
+  "results": {
+    "completedSteps": 1,
+    "transactions": [
+      {
+        "type": "bridge",
+        "txHash": "0x123abc...",
+        "chain": "arbitrum",
+        "gasUsed": "150000",
+        "gasCostUsd": 1.50
+      }
+    ]
+  },
+  "createdAt": "2024-01-15T10:40:00Z",
+  "updatedAt": "2024-01-15T10:43:00Z"
+}
+```
+
+### 200 OK - Completado
+
+```json
+{
+  "id": "intent_xyz789abc123",
+  "walletId": "pan_wallet_abc123",
+  "status": "completed",
+  "action": "lend",
+  "amount": 1000,
+  "asset": "USDC",
+  "executionPlan": {
+    "strategy": "single-bridge",
+    "steps": [...]
+  },
+  "results": {
+    "completedSteps": 2,
+    "transactions": [
+      {
+        "type": "bridge",
+        "txHash": "0x123abc...",
+        "chain": "arbitrum",
+        "gasUsed": "150000",
+        "gasCostUsd": 1.50
+      },
+      {
+        "type": "deposit",
+        "txHash": "0x456def...",
+        "chain": "base",
+        "gasUsed": "200000",
+        "gasCostUsd": 0.80
+      }
+    ],
+    "totalGasUsed": "350000",
+    "totalGasCostUsd": 2.30,
+    "finalAmount": "998.50",
+    "apy": 8.52
+  },
+  "createdAt": "2024-01-15T10:40:00Z",
+  "completedAt": "2024-01-15T10:45:30Z"
+}
+```
+
+### 200 OK - Fallido
+
+```json
+{
+  "id": "intent_xyz789abc123",
+  "walletId": "pan_wallet_abc123",
+  "status": "failed",
+  "action": "lend",
+  "amount": 1000,
+  "asset": "USDC",
+  "error": {
+    "code": "BRIDGE_FAILED",
+    "message": "Bridge operation failed",
+    "details": {
+      "step": 1,
+      "reason": "Fill timeout exceeded"
+    }
+  },
+  "executionPlan": {
+    "steps": [...]
+  },
+  "results": {
+    "completedSteps": 0,
+    "failedStep": 1
+  },
+  "createdAt": "2024-01-15T10:40:00Z",
+  "failedAt": "2024-01-15T10:50:00Z"
+}
+```
+
+### Errores
+
+| Codigo | Error | Descripcion |
+|--------|-------|-------------|
+| 401 | UNAUTHORIZED | API key invalida |
+| 404 | INTENT_NOT_FOUND | Intent no existe |
+
+## Ejemplos
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/intents/intent_xyz789abc123" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.pan.dev/v1/intents/intent_xyz789abc123',
+  {
+    headers: {
+      'Authorization': `Bearer ${process.env.PAN_API_KEY}`
+    }
+  }
+);
+
+const intent = await response.json();
+console.log('Estado:', intent.status);
+```
+
+```typescript SDK
+const intent = await pan.getIntent('intent_xyz789abc123');
+console.log('Estado:', intent.status);
+```
+</CodeGroup>
+
+## Polling
+
+```javascript
+async function esperarIntent(intentId) {
+  while (true) {
+    const intent = await pan.getIntent(intentId);
+
+    if (intent.status === 'completed') {
+      return intent;
+    }
+
+    if (intent.status === 'failed') {
+      throw new Error(intent.error.message);
+    }
+
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
+```
+
+<Tip>
+  Intervalo de polling recomendado: 5-10 segundos
+</Tip>

@@ -1,0 +1,500 @@
+---
+title: "Wallets"
+description: "Todo sobre wallets multi-chain en Pan API"
+---
+
+Las wallets son el componente fundamental de Pan. Representan cuentas de usuario que funcionan en multiples blockchains con una sola direccion.
+
+## Que es una Wallet en Pan?
+
+Una wallet de Pan es una cuenta no-custodial que:
+
+- **Una direccion, multiples chains**: La misma direccion funciona en Ethereum, Arbitrum, Base, etc.
+- **No-custodial**: Tu no tienes acceso a las llaves privadas (gestionadas por Privy)
+- **Ligada a un usuario**: Cada wallet pertenece a un `userId` de tu aplicacion
+- **Multi-token**: Soporta multiples tokens por chain
+
+```
+Wallet Pan
+├── ID: pan_wallet_abc123
+├── Address: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+├── User ID: usuario_maria_123
+│
+├── Ethereum
+│   ├── 200 USDC
+│   └── 0.5 ETH
+│
+├── Arbitrum
+│   ├── 500 USDC
+│   └── 0.1 ETH
+│
+└── Base
+    └── 300 USDC
+```
+
+## Crear una Wallet
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.pan.dev/v1/wallets \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "usuario_maria_123",
+    "chainType": "ethereum",
+    "metadata": {
+      "nombre": "Maria Garcia",
+      "email": "maria@ejemplo.com",
+      "plan": "premium"
+    }
+  }'
+```
+
+```javascript JavaScript
+const wallet = await pan.wallet.create({
+  userId: 'usuario_maria_123',
+  chainType: 'ethereum', // opcional, default: 'ethereum'
+  metadata: {
+    nombre: 'Maria Garcia',
+    email: 'maria@ejemplo.com',
+    plan: 'premium'
+  }
+});
+```
+
+```python Python
+wallet = requests.post(
+    'https://api.pan.dev/v1/wallets',
+    headers={'Authorization': f'Bearer {API_KEY}'},
+    json={
+        'userId': 'usuario_maria_123',
+        'metadata': {
+            'nombre': 'Maria Garcia',
+            'email': 'maria@ejemplo.com'
+        }
+    }
+).json()
+```
+</CodeGroup>
+
+### Parametros
+
+| Parametro | Tipo | Requerido | Descripcion |
+|-----------|------|-----------|-------------|
+| `userId` | string | Si | ID unico del usuario en tu aplicacion |
+| `chainType` | string | No | Tipo de chain: `ethereum` (default) o `tron` |
+| `email` | string | No | Email del usuario (para notificaciones) |
+| `metadata` | object | No | Datos adicionales que quieras almacenar |
+
+### Respuesta
+
+<ResponseExample>
+```json
+{
+  "id": "pan_wallet_a1b2c3d4e5f6",
+  "userId": "usuario_maria_123",
+  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "chainType": "ethereum",
+  "chains": [
+    "ethereum",
+    "ethereum-sepolia",
+    "arbitrum",
+    "arbitrum-sepolia",
+    "base",
+    "base-sepolia"
+  ],
+  "metadata": {
+    "nombre": "Maria Garcia",
+    "email": "maria@ejemplo.com",
+    "plan": "premium"
+  },
+  "createdAt": "2024-01-15T10:30:00Z"
+}
+```
+</ResponseExample>
+
+<Note>
+  **userId debe ser unico**. Si intentas crear una wallet con un userId que ya existe, recibiras un error. Usa el endpoint GET para recuperar wallets existentes.
+</Note>
+
+## Obtener una Wallet
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/wallets/usuario_maria_123" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+
+```javascript JavaScript
+const wallet = await pan.wallet.get('usuario_maria_123');
+```
+</CodeGroup>
+
+<Tip>
+  El endpoint usa `userId`, no `walletId`. Esto facilita mapear usuarios de tu aplicacion a wallets de Pan.
+</Tip>
+
+## Consultar Balances
+
+Obtiene balances de todas las chains y tokens con una sola llamada:
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/balances/pan_wallet_a1b2c3d4e5f6" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+
+```javascript JavaScript
+const balances = await pan.wallet.getBalances('pan_wallet_a1b2c3d4e5f6');
+
+// Acceder a balances por chain
+console.log('Arbitrum:', balances.balances['arbitrum']);
+console.log('Total USD:', balances.totalUsdValue);
+```
+</CodeGroup>
+
+<ResponseExample>
+```json
+{
+  "walletId": "pan_wallet_a1b2c3d4e5f6",
+  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "balances": {
+    "ethereum": [
+      {
+        "symbol": "USDC",
+        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "balance": "200000000",
+        "balanceFormatted": "200.00",
+        "decimals": 6,
+        "usdValue": 200.00
+      },
+      {
+        "symbol": "ETH",
+        "address": "0x0000000000000000000000000000000000000000",
+        "balance": "500000000000000000",
+        "balanceFormatted": "0.50",
+        "decimals": 18,
+        "usdValue": 1250.00
+      }
+    ],
+    "arbitrum": [
+      {
+        "symbol": "USDC",
+        "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "balance": "500000000",
+        "balanceFormatted": "500.00",
+        "decimals": 6,
+        "usdValue": 500.00
+      }
+    ],
+    "base": [
+      {
+        "symbol": "USDC",
+        "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "balance": "300000000",
+        "balanceFormatted": "300.00",
+        "decimals": 6,
+        "usdValue": 300.00
+      }
+    ]
+  },
+  "totalUsdValue": 2250.00,
+  "updatedAt": "2024-01-15T10:35:00Z"
+}
+```
+</ResponseExample>
+
+### Estructura de Balance
+
+Cada token en el balance incluye:
+
+| Campo | Descripcion |
+|-------|-------------|
+| `symbol` | Simbolo del token (USDC, ETH, etc.) |
+| `address` | Direccion del contrato del token |
+| `balance` | Balance en unidades minimas (wei/smallest unit) |
+| `balanceFormatted` | Balance formateado con decimales |
+| `decimals` | Numero de decimales del token |
+| `usdValue` | Valor en USD del balance |
+
+## Chains Soportadas
+
+### Mainnet
+
+| Chain | Chain ID | Estado |
+|-------|----------|--------|
+| Ethereum | 1 | Proximo |
+| Arbitrum One | 42161 | Proximo |
+| Base | 8453 | Proximo |
+
+### Testnet (Disponible ahora)
+
+| Chain | Chain ID | Estado |
+|-------|----------|--------|
+| Ethereum Sepolia | 11155111 | Activo |
+| Arbitrum Sepolia | 421614 | Activo |
+| Base Sepolia | 84532 | Activo |
+
+<Note>
+  Actualmente Pan opera en testnets. Mainnet estara disponible pronto.
+</Note>
+
+## Tokens Soportados
+
+### USDC (Principal)
+
+| Chain | Direccion |
+|-------|-----------|
+| Ethereum | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
+| Arbitrum | `0xaf88d065e77c8cC2239327C5EDb3A432268e5831` |
+| Base | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+
+### Otros Tokens
+
+| Token | Ethereum | Arbitrum | Base |
+|-------|----------|----------|------|
+| USDT | Si | Si | No |
+| DAI | Si | Si | No |
+| WETH | Si | Si | Si |
+
+## Como Funcionan las Wallets Multi-chain
+
+Pan utiliza Privy para generar wallets. La magia de "una direccion, multiples chains" funciona porque:
+
+1. **Derivacion Deterministica**: La misma llave privada genera la misma direccion en todas las chains EVM
+2. **Privy como Custodio Tecnico**: Privy maneja las llaves de forma segura
+3. **Tu Aplicacion No Tiene Acceso**: Las llaves nunca salen de la infraestructura de Privy
+
+```
+┌────────────────────────────────────────────┐
+│              Tu Aplicacion                  │
+│                                             │
+│  pan.wallet.create({ userId: '123' })       │
+│                    │                        │
+└────────────────────┼────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────┐
+│                Pan API                      │
+│                                             │
+│  1. Solicita wallet a Privy                 │
+│  2. Almacena mapeo userId -> walletId       │
+│  3. Retorna direccion                       │
+│                    │                        │
+└────────────────────┼────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────┐
+│                  Privy                      │
+│                                             │
+│  1. Genera llave privada                    │
+│  2. Deriva direccion                        │
+│  3. Almacena llave encriptada               │
+│  4. Retorna direccion (no la llave)         │
+│                                             │
+└────────────────────────────────────────────┘
+```
+
+## Limites de Wallets
+
+Los limites de wallets dependen de tu plan:
+
+| Plan | Wallets Maximas |
+|------|-----------------|
+| Free | 100 |
+| Pro | 10,000 |
+| Enterprise | Ilimitadas |
+
+### Verificar Uso
+
+```javascript
+// El limite se verifica automaticamente al crear
+try {
+  const wallet = await pan.wallet.create({ userId: 'nuevo_user' });
+} catch (error) {
+  if (error.code === 'WALLET_LIMIT_EXCEEDED') {
+    console.log('Necesitas actualizar tu plan');
+  }
+}
+```
+
+## Metadata
+
+El campo `metadata` te permite almacenar datos adicionales con cada wallet:
+
+```javascript
+const wallet = await pan.wallet.create({
+  userId: 'usuario_123',
+  metadata: {
+    // Datos de tu aplicacion
+    nombre: 'Juan Perez',
+    email: 'juan@ejemplo.com',
+    plan: 'premium',
+    kyc_status: 'verified',
+    referral_code: 'ABC123',
+
+    // Cualquier dato serializable a JSON
+    preferences: {
+      currency: 'USD',
+      language: 'es'
+    }
+  }
+});
+```
+
+<Warning>
+  No almacenes datos sensibles (contrasenas, tokens de sesion, etc.) en metadata. Aunque estan almacenados de forma segura, es mejor practica mantenerlos separados.
+</Warning>
+
+## Patrones Comunes
+
+### Crear Wallet al Registrarse
+
+```javascript
+async function onUserSignup(user) {
+  // Crear wallet de Pan junto con el registro
+  const wallet = await pan.wallet.create({
+    userId: user.id,
+    metadata: {
+      email: user.email,
+      name: user.name,
+      signupDate: new Date().toISOString()
+    }
+  });
+
+  // Guardar walletId en tu base de datos
+  await db.users.update(user.id, {
+    panWalletId: wallet.id,
+    panWalletAddress: wallet.address
+  });
+
+  return wallet;
+}
+```
+
+### Obtener o Crear Wallet
+
+```javascript
+async function getOrCreateWallet(userId) {
+  try {
+    // Intentar obtener wallet existente
+    return await pan.wallet.get(userId);
+  } catch (error) {
+    if (error.code === 'WALLET_NOT_FOUND') {
+      // Crear si no existe
+      return await pan.wallet.create({ userId });
+    }
+    throw error;
+  }
+}
+```
+
+### Mostrar Balances al Usuario
+
+```javascript
+async function getFormattedBalances(walletId) {
+  const { balances, totalUsdValue } = await pan.wallet.getBalances(walletId);
+
+  const formatted = [];
+
+  for (const [chain, tokens] of Object.entries(balances)) {
+    for (const token of tokens) {
+      if (parseFloat(token.balanceFormatted) > 0) {
+        formatted.push({
+          chain: formatChainName(chain),
+          token: token.symbol,
+          amount: token.balanceFormatted,
+          usd: `$${token.usdValue.toFixed(2)}`
+        });
+      }
+    }
+  }
+
+  return {
+    items: formatted,
+    total: `$${totalUsdValue.toFixed(2)}`
+  };
+}
+
+function formatChainName(chain) {
+  const names = {
+    'ethereum': 'Ethereum',
+    'ethereum-sepolia': 'Ethereum (Testnet)',
+    'arbitrum': 'Arbitrum',
+    'arbitrum-sepolia': 'Arbitrum (Testnet)',
+    'base': 'Base',
+    'base-sepolia': 'Base (Testnet)'
+  };
+  return names[chain] || chain;
+}
+```
+
+## Fondear Wallets
+
+### En Testnet (Demo)
+
+Pan ofrece un endpoint para fondear wallets de prueba:
+
+```javascript
+await fetch('https://api.pan.dev/v1/demo/fund', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${API_KEY}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    walletId: 'pan_wallet_abc123',
+    chain: 'arbitrum-sepolia',
+    amount: 1000 // USDC
+  })
+});
+```
+
+### En Produccion
+
+En produccion, los usuarios depositan fondos directamente a su direccion de wallet:
+
+```javascript
+// Mostrar direccion para deposito
+const wallet = await pan.wallet.get(userId);
+
+return {
+  message: 'Deposita fondos a esta direccion:',
+  address: wallet.address,
+  supportedChains: ['Ethereum', 'Arbitrum', 'Base'],
+  supportedTokens: ['USDC', 'USDT', 'ETH']
+};
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Consultar Balances"
+    icon="wallet"
+    href="/guias/consultar-balances"
+  >
+    Guia detallada sobre consulta de balances
+  </Card>
+  <Card
+    title="Intents"
+    icon="target"
+    href="/guias/conceptos/intents"
+  >
+    Aprende sobre operaciones basadas en intents
+  </Card>
+  <Card
+    title="Crear Wallets API"
+    icon="terminal"
+    href="/api/wallets/crear-wallet"
+  >
+    Referencia completa del endpoint
+  </Card>
+  <Card
+    title="Seguridad"
+    icon="shield"
+    href="/guias/mejores-practicas/seguridad"
+  >
+    Mejores practicas de seguridad
+  </Card>
+</CardGroup>

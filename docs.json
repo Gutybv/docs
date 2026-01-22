@@ -3,82 +3,126 @@
   "theme": "mint",
   "name": "Pan API",
   "colors": {
-    "primary": "#6366F1",
-    "light": "#818CF8",
-    "dark": "#4F46E5"
+    "primary": "#841492",
+    "light": "#a855f7",
+    "dark": "#6b21a8"
   },
   "favicon": "/favicon.svg",
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Guias",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Empezar",
             "pages": [
               "index",
-              "guides/quickstart",
-              "guides/authentication"
+              "guias/inicio-rapido",
+              "guias/autenticacion"
             ]
           },
           {
-            "group": "Core concepts",
+            "group": "Conceptos Fundamentales",
             "pages": [
-              "guides/concepts/overview",
-              "guides/concepts/wallets",
-              "guides/concepts/intents",
-              "guides/concepts/execution-plans"
+              "guias/conceptos/vision-general",
+              "guias/conceptos/wallets",
+              "guias/conceptos/intents",
+              "guias/conceptos/planes-ejecucion"
             ]
           },
           {
-            "group": "Guides",
+            "group": "Guias Practicas",
             "pages": [
-              "guides/creating-wallets",
-              "guides/checking-balances",
-              "guides/executing-intents",
-              "guides/monitoring-status"
+              "guias/crear-wallets",
+              "guias/consultar-balances",
+              "guias/ejecutar-intents",
+              "guias/monitorear-estado",
+              "guias/obtener-yields"
             ]
           },
           {
-            "group": "Best practices",
+            "group": "SDK de JavaScript",
             "pages": [
-              "guides/best-practices/security",
-              "guides/best-practices/error-handling",
-              "guides/best-practices/performance",
-              "guides/best-practices/integration"
+              "sdk/instalacion",
+              "sdk/cliente",
+              "sdk/wallets",
+              "sdk/intents",
+              "sdk/balances",
+              "sdk/yields",
+              "sdk/errores"
             ]
           },
           {
-            "group": "Limitations",
+            "group": "Mejores Practicas",
             "pages": [
-              "guides/limitations/current-support",
-              "guides/limitations/roadmap"
+              "guias/mejores-practicas/seguridad",
+              "guias/mejores-practicas/manejo-errores",
+              "guias/mejores-practicas/rendimiento",
+              "guias/mejores-practicas/integracion"
+            ]
+          },
+          {
+            "group": "Ejemplos",
+            "pages": [
+              "ejemplos/fintech-basico",
+              "ejemplos/optimizacion-rendimiento",
+              "ejemplos/multichain"
+            ]
+          },
+          {
+            "group": "Redes y Tokens",
+            "pages": [
+              "redes/chains-soportadas",
+              "redes/tokens",
+              "redes/protocolos"
+            ]
+          },
+          {
+            "group": "Limitaciones",
+            "pages": [
+              "limitaciones/soporte-actual",
+              "limitaciones/roadmap"
             ]
           }
         ]
       },
       {
-        "tab": "API Reference",
+        "tab": "Referencia API",
         "groups": [
           {
-            "group": "Overview",
+            "group": "Introduccion",
             "pages": [
-              "api-reference/introduction"
+              "api/introduccion",
+              "api/autenticacion",
+              "api/errores",
+              "api/rate-limits"
             ]
           },
           {
             "group": "Wallets",
             "pages": [
-              "api-reference/endpoint/create-wallet",
-              "api-reference/endpoint/get-wallet",
-              "api-reference/endpoint/get-balances"
+              "api/wallets/crear-wallet",
+              "api/wallets/obtener-wallet",
+              "api/wallets/obtener-balances"
             ]
           },
           {
             "group": "Intents",
             "pages": [
-              "api-reference/endpoint/create-intent",
-              "api-reference/endpoint/get-intent"
+              "api/intents/crear-intent",
+              "api/intents/obtener-intent"
+            ]
+          },
+          {
+            "group": "Yields",
+            "pages": [
+              "api/yields/obtener-yields"
+            ]
+          },
+          {
+            "group": "Demo",
+            "pages": [
+              "api/demo/fondear-wallet"
             ]
           }
         ]
@@ -92,13 +136,13 @@
   "navbar": {
     "links": [
       {
-        "label": "Support",
+        "label": "Soporte",
         "href": "mailto:support@pan.dev"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Get API Key",
+      "label": "Obtener API Key",
       "href": "https://app.pan.dev"
     }
   },
@@ -113,5 +157,9 @@
       "cursor",
       "vscode"
     ]
+  },
+  "footerSocials": {
+    "github": "https://github.com/pan-dev",
+    "twitter": "https://twitter.com/pan_api"
   }
 }

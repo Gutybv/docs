@@ -1,0 +1,253 @@
+---
+title: "Intents (SDK)"
+description: "Crear y monitorear intents con el SDK"
+---
+
+## Crear Intent de Lending
+
+```typescript
+const intent = await pan.lend({
+  walletId: 'pan_wallet_abc123',
+  amount: 1000,
+  asset: 'USDC'  // Opcional, default: 'USDC'
+});
+
+console.log('Intent:', intent.id);
+console.log('Estado:', intent.status);
+console.log('Plan:', intent.executionPlan);
+```
+
+## Crear Intent de Withdraw
+
+```typescript
+const intent = await pan.withdraw({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  chain: 'base'  // Requerido
+});
+```
+
+## Crear Intent de Bridge
+
+```typescript
+const intent = await pan.bridge({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  fromChain: 'ethereum',
+  toChain: 'arbitrum'
+});
+```
+
+## Obtener Estado
+
+```typescript
+const intent = await pan.getIntent('intent_xyz789');
+
+console.log('Estado:', intent.status);
+console.log('Pasos completados:', intent.results?.completedSteps);
+```
+
+## Tipos
+
+```typescript
+interface LendParams {
+  walletId: string;
+  amount: number;
+  asset?: string;
+  chain?: string;
+}
+
+interface WithdrawParams {
+  walletId: string;
+  amount: number;
+  asset?: string;
+  chain: string;
+}
+
+interface BridgeParams {
+  walletId: string;
+  amount: number;
+  asset?: string;
+  fromChain: string;
+  toChain: string;
+}
+
+interface Intent {
+  id: string;
+  walletId: string;
+  status: 'pending' | 'planning' | 'executing' | 'completed' | 'failed';
+  action: 'lend' | 'withdraw' | 'bridge';
+  amount: number;
+  asset: string;
+  executionPlan?: ExecutionPlan;
+  results?: IntentResults;
+  error?: IntentError;
+  createdAt: string;
+  completedAt?: string;
+}
+
+interface ExecutionPlan {
+  strategy: string;
+  steps: Step[];
+  estimatedGasUsd: number;
+  estimatedTime: string;
+}
+
+interface IntentResults {
+  completedSteps: number;
+  transactions: Transaction[];
+  totalGasUsed?: string;
+  totalGasCostUsd?: number;
+  finalAmount?: string;
+  apy?: number;
+}
+```
+
+## Esperar Completacion
+
+```typescript
+async function waitForIntent(intentId: string): Promise<Intent> {
+  while (true) {
+    const intent = await pan.getIntent(intentId);
+
+    if (intent.status === 'completed') {
+      return intent;
+    }
+
+    if (intent.status === 'failed') {
+      throw new PanError(intent.error!);
+    }
+
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
+
+// Uso
+const intent = await pan.lend({ walletId, amount: 1000, asset: 'USDC' });
+const result = await waitForIntent(intent.id);
+console.log('Completado! Gas:', result.results?.totalGasCostUsd);
+```
+
+## Con Callback de Progreso
+
+```typescript
+async function executeWithProgress(
+  params: LendParams,
+  onProgress: (intent: Intent) => void
+): Promise<Intent> {
+  const intent = await pan.lend(params);
+  onProgress(intent);
+
+  while (true) {
+    const updated = await pan.getIntent(intent.id);
+    onProgress(updated);
+
+    if (updated.status === 'completed' || updated.status === 'failed') {
+      return updated;
+    }
+
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
+
+// Uso
+const result = await executeWithProgress(
+  { walletId, amount: 1000, asset: 'USDC' },
+  (intent) => {
+    console.log(`Estado: ${intent.status}`);
+    if (intent.executionPlan) {
+      const done = intent.results?.completedSteps || 0;
+      const total = intent.executionPlan.steps.length;
+      console.log(`Progreso: ${done}/${total}`);
+    }
+  }
+);
+```
+
+## Hook de React
+
+```typescript
+import { useState, useCallback } from 'react';
+import { usePan } from './usePan';
+import type { Intent, LendParams } from '@pan/sdk';
+
+export function useIntent() {
+  const pan = usePan();
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const execute = useCallback(async (params: LendParams) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Crear intent
+      let current = await pan.lend(params);
+      setIntent(current);
+
+      // Monitorear
+      while (current.status !== 'completed' && current.status !== 'failed') {
+        await new Promise(r => setTimeout(r, 5000));
+        current = await pan.getIntent(current.id);
+        setIntent(current);
+      }
+
+      if (current.status === 'failed') {
+        throw new Error(current.error?.message || 'Intent failed');
+      }
+
+      return current;
+    } catch (err) {
+      setError(err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [pan]);
+
+  const progress = intent?.executionPlan
+    ? ((intent.results?.completedSteps || 0) / intent.executionPlan.steps.length) * 100
+    : 0;
+
+  return {
+    intent,
+    loading,
+    error,
+    execute,
+    progress,
+    status: intent?.status
+  };
+}
+```
+
+```tsx
+// Uso en componente
+function LendButton({ walletId }) {
+  const { execute, loading, progress, status } = useIntent();
+
+  const handleLend = async () => {
+    try {
+      const result = await execute({
+        walletId,
+        amount: 1000,
+        asset: 'USDC'
+      });
+      console.log('Completado!', result);
+    } catch (err) {
+      console.error('Error:', err);
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={handleLend} disabled={loading}>
+        {loading ? `${progress.toFixed(0)}%` : 'Depositar'}
+      </button>
+      {status && <p>Estado: {status}</p>}
+    </div>
+  );
+}
+```

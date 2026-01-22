@@ -1,0 +1,428 @@
+---
+title: "Vision General"
+description: "Entiende los conceptos fundamentales de Pan API"
+---
+
+Pan API esta construida alrededor de tres conceptos fundamentales que trabajan juntos para proporcionar una interfaz poderosa e intuitiva para operaciones DeFi: **Wallets**, **Intents**, y **Planes de Ejecucion**.
+
+## Arquitectura de Alto Nivel
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Tu Aplicacion                            │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         Pan API                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   Wallets    │  │   Intents    │  │   Yields     │          │
+│  │   Service    │  │   Service    │  │   Service    │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│         │                 │                 │                   │
+│         ▼                 ▼                 ▼                   │
+│  ┌──────────────────────────────────────────────────┐          │
+│  │              Intent Planner                       │          │
+│  │   (Analiza balances, yields, y genera plan)       │          │
+│  └──────────────────────────────────────────────────┘          │
+│                           │                                     │
+│                           ▼                                     │
+│  ┌──────────────────────────────────────────────────┐          │
+│  │              Execution Engine                     │          │
+│  │   (Ejecuta bridges, swaps, deposits)              │          │
+│  └──────────────────────────────────────────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Blockchains                                 │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐                 │
+│   │ Ethereum │    │ Arbitrum │    │   Base   │                 │
+│   └──────────┘    └──────────┘    └──────────┘                 │
+│                                                                  │
+│   ┌──────────────────────────────────────────────┐             │
+│   │             Protocolos DeFi                   │             │
+│   │   Aave  │  Across Bridge  │  Uniswap         │             │
+│   └──────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Los Tres Pilares
+
+<CardGroup cols={3}>
+  <Card
+    title="Wallets"
+    icon="wallet"
+    href="/guias/conceptos/wallets"
+  >
+    Cuentas multi-chain que abstraen la complejidad de blockchain
+  </Card>
+  <Card
+    title="Intents"
+    icon="target"
+    href="/guias/conceptos/intents"
+  >
+    Objetivos de alto nivel que Pan ejecuta automaticamente
+  </Card>
+  <Card
+    title="Planes de Ejecucion"
+    icon="route"
+    href="/guias/conceptos/planes-ejecucion"
+  >
+    Estrategias optimizadas para lograr tus intents
+  </Card>
+</CardGroup>
+
+## El Flujo de Pan
+
+<Steps>
+  <Step title="Crea una Wallet">
+    Las wallets son la base de Pan. Cada wallet soporta multiples blockchains con una sola direccion, eliminando la necesidad de manejar direcciones separadas por chain.
+
+    ```javascript
+    const wallet = await pan.wallet.create({
+      userId: 'usuario_123'
+    });
+    // wallet.address: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+    // Funciona en Ethereum, Arbitrum, Base, etc.
+    ```
+  </Step>
+
+  <Step title="Consulta Balances">
+    Consulta balances de todas las chains y tokens con una sola llamada API. Pan maneja la complejidad de consultar multiples blockchains y formatear los resultados.
+
+    ```javascript
+    const balances = await pan.wallet.getBalances(wallet.id);
+    // {
+    //   "arbitrum": [{ symbol: "USDC", balance: "500.00" }],
+    //   "base": [{ symbol: "USDC", balance: "300.00" }],
+    //   "ethereum": [{ symbol: "USDC", balance: "200.00" }]
+    // }
+    ```
+  </Step>
+
+  <Step title="Crea un Intent">
+    Expresa lo que quieres lograr (ej. "prestar $1000 USDC") en lugar de especificar transacciones exactas. El sistema inteligente de Pan maneja el resto.
+
+    ```javascript
+    const intent = await pan.lend({
+      walletId: wallet.id,
+      amount: 1000,
+      asset: 'USDC'
+      // No especificas chain - Pan encuentra el mejor APY
+    });
+    ```
+  </Step>
+
+  <Step title="Pan Genera un Plan">
+    Pan analiza:
+    - Balances actuales del wallet
+    - APYs disponibles en cada chain
+    - Costos de bridge y gas
+    - Tiempo estimado
+
+    Y genera un plan optimizado:
+
+    ```json
+    {
+      "strategy": "multi-bridge",
+      "steps": [
+        { "type": "bridge", "from": "ethereum", "to": "base", "amount": "200" },
+        { "type": "bridge", "from": "arbitrum", "to": "base", "amount": "500" },
+        { "type": "deposit", "protocol": "aave", "chain": "base", "amount": "1000" }
+      ],
+      "expectedApy": 8.52
+    }
+    ```
+  </Step>
+
+  <Step title="Monitorea Ejecucion">
+    Sigue el progreso en tiempo real. Pan proporciona actualizaciones detalladas, planes de ejecucion, y reportes de errores completos.
+
+    ```javascript
+    const status = await pan.getIntent(intent.id);
+    // status: "executing"
+    // completedSteps: 2 de 3
+    ```
+  </Step>
+</Steps>
+
+## Beneficios Clave
+
+<Columns cols={2}>
+  <Card title="Basado en Intents" icon="bullseye">
+    **Expresa objetivos, no transacciones**
+
+    En lugar de escribir codigo para:
+    1. Verificar balances
+    2. Aprobar tokens
+    3. Calcular rutas de bridge
+    4. Ejecutar transacciones
+    5. Manejar errores
+
+    Simplemente dices: "Presta 1000 USDC donde mejor pague"
+  </Card>
+
+  <Card title="Multi-chain Nativo" icon="link">
+    **Una direccion, todas las chains**
+
+    - Direccion unica funciona en ETH, Arbitrum, Base, etc.
+    - Balances unificados con una sola consulta
+    - Bridges automaticos cuando es necesario
+    - Sin manejo de direcciones por chain
+  </Card>
+
+  <Card title="Automatizado" icon="bolt">
+    **Cero gestion de blockchain**
+
+    Pan maneja automaticamente:
+    - Nonces de transacciones
+    - Precios de gas
+    - Reintents en caso de fallo
+    - Confirmaciones de transaccion
+    - Secuencia de operaciones
+  </Card>
+
+  <Card title="Seguro por Defecto" icon="shield">
+    **Infraestructura enterprise-grade**
+
+    - Wallets no-custodiales via Privy
+    - Claves encriptadas
+    - Auditorias de seguridad
+    - Sin acceso a claves privadas
+  </Card>
+</Columns>
+
+## Modelo de Datos
+
+Pan usa un modelo de datos jerarquico:
+
+```
+Developer Account (tu cuenta)
+├── API Keys (para autenticacion)
+│   ├── pan_sk_dev_...  (desarrollo)
+│   └── pan_sk_prod_... (produccion)
+│
+└── Wallets (tus usuarios)
+    ├── wallet_abc123 (Usuario A)
+    │   ├── Balances
+    │   │   ├── Ethereum: 200 USDC
+    │   │   ├── Arbitrum: 500 USDC
+    │   │   └── Base: 300 USDC
+    │   │
+    │   └── Intents
+    │       ├── intent_001 (lend, completed)
+    │       └── intent_002 (withdraw, executing)
+    │
+    └── wallet_def456 (Usuario B)
+        ├── Balances
+        └── Intents
+```
+
+### Desarrolladores y API Keys
+
+Los desarrolladores se autentican usando API keys que identifican su cuenta. Cada cuenta de desarrollador tiene:
+
+- **Plan de suscripcion**: Determina limites (wallets, creditos)
+- **Multiples API keys**: Para diferentes entornos
+- **Multiples wallets**: Para diferentes usuarios en tu aplicacion
+
+### Wallets
+
+Las wallets representan cuentas de usuarios en tu aplicacion. Cada wallet:
+
+- Tiene un identificador unico (`walletId`)
+- Soporta multiples blockchains con una sola direccion
+- Puede ejecutar multiples intents
+- Mantiene balances en todas las chains soportadas
+
+### Intents
+
+Los intents representan objetivos financieros de alto nivel. Cuando creas un intent, Pan:
+
+1. Analiza el estado actual del wallet
+2. Evalua protocolos DeFi disponibles
+3. Genera un plan de ejecucion optimizado
+4. Ejecuta el plan automaticamente
+
+### Planes de Ejecucion
+
+Los planes de ejecucion son estrategias detalladas que describen como Pan lograra un intent. Incluyen:
+
+- Lista de operaciones (swaps, bridges, deposits)
+- Orden de ejecucion
+- Costos esperados y timing
+- Estrategias alternativas si es necesario
+
+## Ejemplo de Flujo Completo
+
+Veamos un ejemplo real paso a paso:
+
+<Steps>
+  <Step title="Crear wallet">
+    ```javascript
+    const wallet = await pan.wallet.create({
+      userId: 'alice_123',
+      metadata: { email: 'alice@ejemplo.com' }
+    });
+    ```
+
+    **Resultado**: Wallet creada con direccion `0x742d35Cc...`
+  </Step>
+
+  <Step title="Consultar balance">
+    Despues de que Alice deposita fondos externamente:
+
+    ```javascript
+    const balances = await pan.wallet.getBalances(wallet.id);
+    ```
+
+    **Resultado**: Alice tiene 500 USDC en Ethereum y 500 USDC en Arbitrum
+  </Step>
+
+  <Step title="Consultar yields">
+    ```javascript
+    const yields = await pan.yields.getAll();
+    ```
+
+    **Resultado**:
+    - Base: 8.52% APY
+    - Arbitrum: 7.23% APY
+    - Ethereum: 5.15% APY
+  </Step>
+
+  <Step title="Crear intent">
+    ```javascript
+    const intent = await pan.lend({
+      walletId: wallet.id,
+      amount: 1000,
+      asset: 'USDC'
+    });
+    ```
+
+    Pan analiza y crea un plan:
+    - **Estrategia**: multi-bridge (consolidar en mejor yield)
+    - **Paso 1**: Bridge 500 USDC de Ethereum a Base
+    - **Paso 2**: Bridge 500 USDC de Arbitrum a Base
+    - **Paso 3**: Depositar 1000 USDC en Aave Base
+    - **APY esperado**: 8.52%
+  </Step>
+
+  <Step title="Monitorear ejecucion">
+    ```javascript
+    // Polling cada 5 segundos
+    let intent = await pan.getIntent(intent.id);
+    while (intent.status === 'executing') {
+      console.log(`Progreso: ${intent.results.completedSteps}/${intent.executionPlan.steps.length}`);
+      await sleep(5000);
+      intent = await pan.getIntent(intent.id);
+    }
+    ```
+
+    **Estados**: `pending` → `planning` → `executing` → `completed`
+  </Step>
+</Steps>
+
+## Comparacion: Con vs Sin Pan
+
+<Columns cols={2}>
+  <Card title="Sin Pan">
+    ```javascript
+    // 1. Configurar providers (por chain)
+    const ethProvider = new JsonRpcProvider(ETH_RPC);
+    const arbProvider = new JsonRpcProvider(ARB_RPC);
+    const baseProvider = new JsonRpcProvider(BASE_RPC);
+
+    // 2. Configurar wallets (por chain)
+    const ethWallet = new Wallet(PRIVATE_KEY, ethProvider);
+    // ... repetir para cada chain
+
+    // 3. Consultar balances (multiples llamadas)
+    const ethBalance = await usdcEth.balanceOf(address);
+    const arbBalance = await usdcArb.balanceOf(address);
+    // ... etc
+
+    // 4. Calcular mejor yield
+    const ethApy = await getAaveApy('ethereum');
+    const arbApy = await getAaveApy('arbitrum');
+    // ... comparar y decidir
+
+    // 5. Aprobar tokens (si es necesario)
+    const approveTx = await usdc.approve(bridge, amount);
+    await approveTx.wait();
+
+    // 6. Ejecutar bridge
+    const bridgeTx = await acrossBridge.deposit(...);
+    await bridgeTx.wait();
+    // Esperar fill en destino...
+
+    // 7. Aprobar para Aave
+    const approveAaveTx = await usdc.approve(aavePool);
+    await approveAaveTx.wait();
+
+    // 8. Depositar en Aave
+    const depositTx = await aavePool.supply(...);
+    await depositTx.wait();
+
+    // 9. Manejar errores, reintentos, etc.
+    // ... 100+ lineas mas
+    ```
+  </Card>
+
+  <Card title="Con Pan">
+    ```javascript
+    import { Pan } from '@pan/sdk';
+
+    const pan = new Pan({
+      apiKey: process.env.PAN_API_KEY
+    });
+
+    // Una sola llamada hace todo
+    const intent = await pan.lend({
+      walletId: 'wallet_abc123',
+      amount: 1000,
+      asset: 'USDC'
+    });
+
+    // Monitorear progreso
+    const result = await pan.waitForIntent(intent.id);
+
+    console.log('Completado!');
+    console.log(`APY: ${result.results.apy}%`);
+    console.log(`Gas: $${result.results.totalGasCostUsd}`);
+    ```
+  </Card>
+</Columns>
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Wallets en Detalle"
+    icon="wallet"
+    href="/guias/conceptos/wallets"
+  >
+    Aprende como funcionan las wallets multi-chain
+  </Card>
+  <Card
+    title="Intents Explicados"
+    icon="target"
+    href="/guias/conceptos/intents"
+  >
+    Entiende como funciona la ejecucion basada en intents
+  </Card>
+  <Card
+    title="Planes de Ejecucion"
+    icon="route"
+    href="/guias/conceptos/planes-ejecucion"
+  >
+    Explora como Pan optimiza estrategias de ejecucion
+  </Card>
+  <Card
+    title="Referencia API"
+    icon="terminal"
+    href="/api/introduccion"
+  >
+    Documentacion completa de endpoints
+  </Card>
+</CardGroup>

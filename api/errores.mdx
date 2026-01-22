@@ -1,0 +1,353 @@
+---
+title: "Codigos de Error"
+description: "Referencia completa de errores de Pan API"
+---
+
+## Estructura de Error
+
+```json
+{
+  "error": "ERROR_CODE",
+  "message": "Descripcion legible del error",
+  "details": {
+    "campo": "informacion adicional"
+  }
+}
+```
+
+## Errores de Autenticacion
+
+### UNAUTHORIZED
+
+```json
+{
+  "error": "UNAUTHORIZED",
+  "message": "Invalid or missing API key"
+}
+```
+
+**Codigo HTTP**: 401
+
+**Causas**:
+- Header `Authorization` faltante
+- API key mal formateada
+- API key revocada o invalida
+
+**Solucion**:
+```javascript
+// Verificar formato correcto
+headers: {
+  'Authorization': `Bearer ${apiKey}` // Nota el espacio
+}
+```
+
+### FORBIDDEN
+
+```json
+{
+  "error": "FORBIDDEN",
+  "message": "Access denied"
+}
+```
+
+**Codigo HTTP**: 403
+
+**Causas**:
+- Creditos insuficientes
+- Plan no permite esta operacion
+- Acceso a recurso de otro developer
+
+## Errores de Validacion
+
+### INVALID_REQUEST
+
+```json
+{
+  "error": "INVALID_REQUEST",
+  "message": "Invalid request body",
+  "details": {
+    "field": "amount",
+    "issue": "Must be a positive number"
+  }
+}
+```
+
+**Codigo HTTP**: 400
+
+**Causas**:
+- Campo requerido faltante
+- Tipo de dato incorrecto
+- Valor fuera de rango
+
+### INVALID_WALLET_ID
+
+```json
+{
+  "error": "INVALID_WALLET_ID",
+  "message": "Wallet ID format is invalid",
+  "details": {
+    "provided": "wallet123",
+    "expected": "pan_wallet_*"
+  }
+}
+```
+
+**Codigo HTTP**: 400
+
+### INVALID_CHAIN
+
+```json
+{
+  "error": "INVALID_CHAIN",
+  "message": "Chain not supported",
+  "details": {
+    "provided": "polygon",
+    "supported": ["ethereum", "arbitrum", "base"]
+  }
+}
+```
+
+**Codigo HTTP**: 400
+
+## Errores de Recursos
+
+### WALLET_NOT_FOUND
+
+```json
+{
+  "error": "WALLET_NOT_FOUND",
+  "message": "Wallet not found for user",
+  "details": {
+    "userId": "usuario_123"
+  }
+}
+```
+
+**Codigo HTTP**: 404
+
+**Solucion**: Crear wallet primero o verificar userId
+
+### INTENT_NOT_FOUND
+
+```json
+{
+  "error": "INTENT_NOT_FOUND",
+  "message": "Intent not found",
+  "details": {
+    "intentId": "intent_xyz789"
+  }
+}
+```
+
+**Codigo HTTP**: 404
+
+### WALLET_ALREADY_EXISTS
+
+```json
+{
+  "error": "WALLET_ALREADY_EXISTS",
+  "message": "Wallet already exists for this user",
+  "details": {
+    "userId": "usuario_123",
+    "existingWalletId": "pan_wallet_abc123"
+  }
+}
+```
+
+**Codigo HTTP**: 409
+
+**Solucion**: Usar GET para obtener wallet existente
+
+## Errores de Limites
+
+### WALLET_LIMIT_EXCEEDED
+
+```json
+{
+  "error": "WALLET_LIMIT_EXCEEDED",
+  "message": "Maximum wallet limit reached for your plan",
+  "details": {
+    "limit": 100,
+    "current": 100,
+    "plan": "free"
+  }
+}
+```
+
+**Codigo HTTP**: 403
+
+**Solucion**: Actualizar plan o eliminar wallets no usadas
+
+### RATE_LIMITED
+
+```json
+{
+  "error": "RATE_LIMITED",
+  "message": "Too many requests",
+  "details": {
+    "limit": 100,
+    "window": "1 minute",
+    "retryAfter": 45
+  }
+}
+```
+
+**Codigo HTTP**: 429
+
+**Headers**:
+```
+Retry-After: 45
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1642248045
+```
+
+**Solucion**: Implementar backoff exponencial
+
+### INSUFFICIENT_CREDITS
+
+```json
+{
+  "error": "INSUFFICIENT_CREDITS",
+  "message": "Not enough credits for this operation",
+  "details": {
+    "required": 5,
+    "available": 2
+  }
+}
+```
+
+**Codigo HTTP**: 402
+
+**Solucion**: Comprar mas creditos o actualizar plan
+
+## Errores de Ejecucion
+
+### INSUFFICIENT_FUNDS
+
+```json
+{
+  "error": "INSUFFICIENT_FUNDS",
+  "message": "Wallet does not have sufficient funds",
+  "details": {
+    "asset": "USDC",
+    "required": "1000",
+    "available": "750",
+    "shortfall": "250"
+  }
+}
+```
+
+**Codigo HTTP**: 400
+
+**Solucion**: Depositar mas fondos antes de ejecutar
+
+### BRIDGE_FAILED
+
+```json
+{
+  "error": "BRIDGE_FAILED",
+  "message": "Bridge operation failed",
+  "details": {
+    "from": "arbitrum",
+    "to": "base",
+    "reason": "Fill timeout exceeded"
+  }
+}
+```
+
+**Codigo HTTP**: 500
+
+**Nota**: Los fondos permanecen en la chain origen
+
+### DEPOSIT_FAILED
+
+```json
+{
+  "error": "DEPOSIT_FAILED",
+  "message": "Deposit to protocol failed",
+  "details": {
+    "protocol": "aave",
+    "chain": "base",
+    "reason": "Transaction reverted"
+  }
+}
+```
+
+**Codigo HTTP**: 500
+
+### EXECUTION_TIMEOUT
+
+```json
+{
+  "error": "EXECUTION_TIMEOUT",
+  "message": "Execution exceeded maximum time",
+  "details": {
+    "elapsed": "600s",
+    "maxAllowed": "600s"
+  }
+}
+```
+
+**Codigo HTTP**: 504
+
+## Errores de Servidor
+
+### INTERNAL_ERROR
+
+```json
+{
+  "error": "INTERNAL_ERROR",
+  "message": "An unexpected error occurred"
+}
+```
+
+**Codigo HTTP**: 500
+
+**Solucion**: Reintentar con backoff, contactar soporte si persiste
+
+### SERVICE_UNAVAILABLE
+
+```json
+{
+  "error": "SERVICE_UNAVAILABLE",
+  "message": "Service temporarily unavailable"
+}
+```
+
+**Codigo HTTP**: 503
+
+**Solucion**: Reintentar despues del `Retry-After` header
+
+## Manejo de Errores
+
+```javascript
+async function requestConManejo(fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    switch (error.code) {
+      case 'RATE_LIMITED':
+        const wait = error.details?.retryAfter || 60;
+        await sleep(wait * 1000);
+        return requestConManejo(fn);
+
+      case 'INSUFFICIENT_FUNDS':
+        throw new UserError(`Necesitas ${error.details.shortfall} mas`);
+
+      case 'WALLET_NOT_FOUND':
+        // Crear wallet automaticamente
+        return await crearWallet(error.details.userId);
+
+      case 'INTERNAL_ERROR':
+      case 'SERVICE_UNAVAILABLE':
+        // Reintentar con backoff
+        await sleep(5000);
+        return requestConManejo(fn);
+
+      default:
+        throw error;
+    }
+  }
+}
+```

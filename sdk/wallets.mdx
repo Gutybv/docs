@@ -1,0 +1,200 @@
+---
+title: "Wallets (SDK)"
+description: "Operaciones de wallet con el SDK"
+---
+
+## Crear Wallet
+
+```typescript
+const wallet = await pan.wallet.create({
+  userId: 'usuario_123',
+  email: 'usuario@ejemplo.com',  // Opcional
+  metadata: {                     // Opcional
+    nombre: 'Juan Perez',
+    plan: 'premium'
+  }
+});
+
+console.log(wallet.id);       // pan_wallet_abc123
+console.log(wallet.address);  // 0x742d35Cc...
+```
+
+### Tipos
+
+```typescript
+interface CreateWalletParams {
+  userId: string;
+  chainType?: 'ethereum' | 'tron';
+  email?: string;
+  metadata?: Record<string, any>;
+}
+
+interface Wallet {
+  id: string;
+  userId: string;
+  address: string;
+  chainType: string;
+  chains: string[];
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+```
+
+## Obtener Wallet
+
+```typescript
+const wallet = await pan.wallet.get('usuario_123');
+
+console.log(wallet.address);
+```
+
+## Obtener Balances
+
+```typescript
+const balances = await pan.wallet.getBalances('pan_wallet_abc123');
+
+console.log('Total USD:', balances.totalUsdValue);
+
+// Iterar por chain
+for (const [chain, tokens] of Object.entries(balances.balances)) {
+  for (const token of tokens) {
+    console.log(`${chain}: ${token.balanceFormatted} ${token.symbol}`);
+  }
+}
+```
+
+### Tipos
+
+```typescript
+interface Balances {
+  walletId: string;
+  address: string;
+  balances: Record<string, TokenBalance[]>;
+  totalUsdValue: number;
+  updatedAt: string;
+}
+
+interface TokenBalance {
+  symbol: string;
+  address: string;
+  balance: string;
+  balanceFormatted: string;
+  decimals: number;
+  usdValue: number;
+}
+```
+
+## Helpers
+
+### Calcular Total de un Asset
+
+```typescript
+function getTotalBalance(balances: Balances, asset: string): number {
+  let total = 0;
+
+  for (const tokens of Object.values(balances.balances)) {
+    const token = tokens.find(t => t.symbol === asset);
+    if (token) {
+      total += parseFloat(token.balanceFormatted);
+    }
+  }
+
+  return total;
+}
+
+// Uso
+const balances = await pan.wallet.getBalances(walletId);
+const totalUsdc = getTotalBalance(balances, 'USDC');
+console.log('Total USDC:', totalUsdc);
+```
+
+### Verificar Fondos Suficientes
+
+```typescript
+function hasSufficientFunds(
+  balances: Balances,
+  asset: string,
+  required: number
+): boolean {
+  return getTotalBalance(balances, asset) >= required;
+}
+
+// Uso
+if (!hasSufficientFunds(balances, 'USDC', 1000)) {
+  throw new Error('Fondos insuficientes');
+}
+```
+
+## Patron: Obtener o Crear
+
+```typescript
+async function getOrCreateWallet(userId: string) {
+  try {
+    return await pan.wallet.get(userId);
+  } catch (error) {
+    if (error.code === 'WALLET_NOT_FOUND') {
+      return await pan.wallet.create({ userId });
+    }
+    throw error;
+  }
+}
+```
+
+## Hook de React
+
+```typescript
+import { useState, useEffect, useCallback } from 'react';
+import { usePan } from './usePan';
+import type { Wallet, Balances } from '@pan/sdk';
+
+export function useWallet(userId: string) {
+  const pan = usePan();
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [balances, setBalances] = useState<Balances | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const w = await pan.wallet.get(userId);
+      setWallet(w);
+
+      const b = await pan.wallet.getBalances(w.id);
+      setBalances(b);
+    } catch (err) {
+      if (err.code !== 'WALLET_NOT_FOUND') {
+        setError(err);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [pan, userId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const create = async () => {
+    const w = await pan.wallet.create({ userId });
+    setWallet(w);
+    return w;
+  };
+
+  const refresh = async () => {
+    if (!wallet) return;
+    const b = await pan.wallet.getBalances(wallet.id);
+    setBalances(b);
+  };
+
+  return {
+    wallet,
+    balances,
+    loading,
+    error,
+    create,
+    refresh,
+    hasWallet: !!wallet
+  };
+}
+```

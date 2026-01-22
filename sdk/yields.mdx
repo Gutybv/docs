@@ -1,0 +1,181 @@
+---
+title: "Yields (SDK)"
+description: "Consultar APYs con el SDK"
+---
+
+## Obtener Yields
+
+```typescript
+const yields = await pan.yields.getAll();
+
+console.log('Mejor APY:', yields.bestYield.apy, '%');
+console.log('En chain:', yields.bestYield.chain);
+```
+
+## Estructura de Respuesta
+
+```typescript
+interface YieldsResponse {
+  yields: Yield[];
+  bestYield: {
+    chain: string;
+    protocol: string;
+    asset: string;
+    apy: number;
+  };
+  updatedAt: string;
+}
+
+interface Yield {
+  chain: string;
+  chainId: number;
+  protocol: string;
+  protocolVersion: string;
+  asset: string;
+  assetAddress: string;
+  apy: number;
+  apyBase: number;
+  apyReward: number;
+  tvl: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  updatedAt: string;
+}
+```
+
+## Listar Yields
+
+```typescript
+const { yields, bestYield } = await pan.yields.getAll();
+
+// Ordenar por APY
+const sorted = [...yields].sort((a, b) => b.apy - a.apy);
+
+sorted.forEach(y => {
+  const isBest = y.chain === bestYield.chain ? ' (MEJOR)' : '';
+  console.log(`${y.chain}: ${y.apy.toFixed(2)}%${isBest}`);
+});
+```
+
+## Helpers
+
+### Yield por Chain
+
+```typescript
+function getYieldForChain(yields: YieldsResponse, chain: string): Yield | undefined {
+  return yields.yields.find(y => y.chain === chain);
+}
+
+const baseYield = getYieldForChain(yields, 'base');
+console.log('Base APY:', baseYield?.apy);
+```
+
+### Calcular Ganancias
+
+```typescript
+function calculateEarnings(
+  amount: number,
+  apy: number,
+  days: number
+): { finalAmount: number; earnings: number } {
+  const dailyRate = apy / 365 / 100;
+  const finalAmount = amount * Math.pow(1 + dailyRate, days);
+  const earnings = finalAmount - amount;
+
+  return { finalAmount, earnings };
+}
+
+// Uso
+const { earnings } = calculateEarnings(1000, 8.52, 365);
+console.log('Ganancia anual:', earnings.toFixed(2)); // ~88.97
+```
+
+## Hook de React
+
+```typescript
+import { useState, useEffect, useCallback } from 'react';
+import { usePan } from './usePan';
+import type { YieldsResponse } from '@pan/sdk';
+
+interface UseYieldsOptions {
+  autoRefresh?: boolean;
+  refreshInterval?: number;
+}
+
+export function useYields(options: UseYieldsOptions = {}) {
+  const { autoRefresh = false, refreshInterval = 300000 } = options; // 5 min default
+  const pan = usePan();
+
+  const [yields, setYields] = useState<YieldsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetch = useCallback(async () => {
+    try {
+      const data = await pan.yields.getAll();
+      setYields(data);
+      setError(null);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [pan]);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const timer = setInterval(fetch, refreshInterval);
+    return () => clearInterval(timer);
+  }, [autoRefresh, refreshInterval, fetch]);
+
+  return {
+    yields: yields?.yields || [],
+    bestYield: yields?.bestYield,
+    loading,
+    error,
+    refresh: fetch
+  };
+}
+```
+
+```tsx
+// Uso
+function YieldsDisplay() {
+  const { yields, bestYield, loading } = useYields({ autoRefresh: true });
+
+  if (loading) return <div>Cargando yields...</div>;
+
+  return (
+    <div>
+      {bestYield && (
+        <div className="best-yield">
+          Mejor: {bestYield.apy.toFixed(2)}% en {bestYield.chain}
+        </div>
+      )}
+
+      <table>
+        <thead>
+          <tr>
+            <th>Chain</th>
+            <th>APY</th>
+            <th>TVL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {yields.map(y => (
+            <tr key={y.chain}>
+              <td>{y.chain}</td>
+              <td>{y.apy.toFixed(2)}%</td>
+              <td>${(y.tvl / 1e6).toFixed(1)}M</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+```

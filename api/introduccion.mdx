@@ -1,0 +1,185 @@
+---
+title: "Introduccion a la API"
+description: "Documentacion completa de Pan API v1"
+---
+
+Bienvenido a la referencia de Pan API. Esta documentacion describe todos los endpoints disponibles, formatos de request/response, codigos de error, y metodos de autenticacion.
+
+## URL Base
+
+Todas las requests deben hacerse a:
+
+```
+https://api.pan.dev/v1
+```
+
+<Note>
+  **Entorno de staging**: Para pruebas, usa `https://api-staging.pan.dev/v1`. Staging usa solo testnets y esta aislado de produccion.
+</Note>
+
+## Autenticacion
+
+Todos los endpoints requieren autenticacion usando una API key. Incluye tu API key en el header `Authorization`:
+
+```bash
+Authorization: Bearer pan_sk_tu_api_key
+```
+
+<Warning>
+  Manten tu API key secreta. Nunca la expongas en codigo del lado del cliente o repositorios publicos. Ver [guia de autenticacion](/guias/autenticacion).
+</Warning>
+
+## Versionado
+
+Pan API usa versionado basado en URL. La version actual es `v1`, incluida en la URL base. Versiones futuras usaran paths diferentes (ej. `/v2/`) para mantener compatibilidad hacia atras.
+
+## Formato de Requests
+
+Todas las requests deben usar:
+- **Metodo**: Metodos HTTP (GET, POST, etc.)
+- **Content-Type**: `application/json` para bodies
+- **Encoding**: UTF-8
+
+## Formato de Respuestas
+
+Todas las respuestas retornan JSON:
+
+<AccordionGroup>
+  <Accordion title="Respuestas exitosas">
+    Respuestas exitosas (codigos 2xx) retornan el recurso directamente:
+
+    ```json
+    {
+      "id": "pan_wallet_abc123",
+      "userId": "usuario_123",
+      "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+      ...
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Respuestas de error">
+    Respuestas de error (codigos 4xx, 5xx) retornan un objeto error:
+
+    ```json
+    {
+      "error": "ERROR_CODE",
+      "message": "Mensaje legible para humanos",
+      "details": {
+        "campo": "valor"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Codigos HTTP
+
+Pan API usa codigos HTTP estandar:
+
+| Codigo | Significado | Descripcion |
+|--------|-------------|-------------|
+| 200 | OK | Request exitoso |
+| 201 | Created | Recurso creado |
+| 400 | Bad Request | Request invalido |
+| 401 | Unauthorized | API key faltante o invalida |
+| 403 | Forbidden | Limite de recursos excedido |
+| 404 | Not Found | Recurso no existe |
+| 429 | Too Many Requests | Rate limit excedido |
+| 500 | Internal Server Error | Error del servidor |
+| 503 | Service Unavailable | Servicio temporalmente no disponible |
+
+## Resumen de Endpoints
+
+### Wallets
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| POST | `/wallets` | Crear wallet |
+| GET | `/wallets/:userId` | Obtener wallet por userId |
+| GET | `/balances/:walletId` | Obtener balances |
+
+### Intents
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| POST | `/intents` | Crear intent |
+| GET | `/intents/:intentId` | Obtener estado de intent |
+
+### Yields
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| GET | `/yields` | Obtener APYs disponibles |
+
+### Demo
+
+| Metodo | Endpoint | Descripcion |
+|--------|----------|-------------|
+| POST | `/demo/fund` | Fondear wallet de prueba |
+
+## Rate Limits
+
+Los rate limits dependen de tu plan de suscripcion:
+
+| Plan | Requests por minuto | Wallets maximas |
+|------|---------------------|-----------------|
+| Free | 100 | 100 |
+| Pro | 1,000 | 10,000 |
+| Enterprise | Custom | Ilimitadas |
+
+Cuando excedes el rate limit, recibiras un `429 Too Many Requests`:
+
+```
+Retry-After: 60
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1642248000
+```
+
+## Creditos
+
+Cada request consume creditos de tu cuenta:
+
+| Endpoint | Creditos |
+|----------|----------|
+| POST /wallets | 1 |
+| GET /wallets/:id | 1 |
+| GET /balances/:id | 1 |
+| GET /yields | 1 |
+| POST /intents | 5 |
+| GET /intents/:id | 1 |
+
+## SDKs Oficiales
+
+<CardGroup cols={2}>
+  <Card
+    title="SDK JavaScript/TypeScript"
+    icon="js"
+    href="/sdk/instalacion"
+  >
+    SDK oficial con soporte TypeScript completo
+  </Card>
+  <Card
+    title="Python SDK"
+    icon="python"
+    href="https://github.com/pan-dev/pan-python"
+  >
+    SDK oficial con soporte async
+  </Card>
+</CardGroup>
+
+<Info>
+  Los SDKs son opcionales. Puedes usar cualquier cliente HTTP para interactuar con Pan API. Todos los endpoints son REST estandar.
+</Info>
+
+## Soporte
+
+<CardGroup cols={2}>
+  <Card title="Email" icon="envelope">
+    support@pan.dev
+  </Card>
+  <Card title="Discord" icon="discord">
+    [Unete a Discord](https://discord.gg/pan)
+  </Card>
+</CardGroup>

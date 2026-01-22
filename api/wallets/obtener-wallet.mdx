@@ -1,0 +1,80 @@
+---
+title: "Obtener Wallet"
+description: "GET /v1/wallets/:userId"
+---
+
+Obtiene la wallet asociada a un usuario.
+
+## Endpoint
+
+```
+GET https://api.pan.dev/v1/wallets/:userId
+```
+
+## Autenticacion
+
+API Key o X402
+
+## Parametros de URL
+
+| Parametro | Tipo | Descripcion |
+|-----------|------|-------------|
+| `userId` | string | ID del usuario en tu app |
+
+## Response
+
+### 200 OK
+
+```json
+{
+  "id": "pan_wallet_a1b2c3d4e5f6",
+  "userId": "usuario_123",
+  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "chainType": "ethereum",
+  "chains": [
+    "ethereum",
+    "ethereum-sepolia",
+    "arbitrum",
+    "arbitrum-sepolia",
+    "base",
+    "base-sepolia"
+  ],
+  "metadata": {
+    "nombre": "Juan Perez"
+  },
+  "createdAt": "2024-01-15T10:30:00Z"
+}
+```
+
+### Errores
+
+| Codigo | Error | Descripcion |
+|--------|-------|-------------|
+| 401 | UNAUTHORIZED | API key invalida |
+| 404 | WALLET_NOT_FOUND | Usuario no tiene wallet |
+
+## Ejemplos
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/wallets/usuario_123" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.pan.dev/v1/wallets/usuario_123',
+  {
+    headers: {
+      'Authorization': `Bearer ${process.env.PAN_API_KEY}`
+    }
+  }
+);
+
+const wallet = await response.json();
+```
+
+```typescript SDK
+const wallet = await pan.wallet.get('usuario_123');
+```
+</CodeGroup>

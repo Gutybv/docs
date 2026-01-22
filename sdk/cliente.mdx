@@ -1,0 +1,223 @@
+---
+title: "Cliente"
+description: "Configuracion avanzada del cliente Pan"
+---
+
+## Instanciacion
+
+```typescript
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!,
+  baseURL: 'https://api.pan.dev/v1',
+  timeout: 30000,
+  debug: false,
+  retries: 3
+});
+```
+
+## Multiples Clientes
+
+Para diferentes entornos o API keys:
+
+```typescript
+// Produccion
+const panProd = new Pan({
+  apiKey: process.env.PAN_API_KEY_PROD!,
+  baseURL: 'https://api.pan.dev/v1'
+});
+
+// Staging
+const panStaging = new Pan({
+  apiKey: process.env.PAN_API_KEY_STAGING!,
+  baseURL: 'https://api-staging.pan.dev/v1'
+});
+```
+
+## Modo Debug
+
+Activa logs detallados para desarrollo:
+
+```typescript
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!,
+  debug: true
+});
+
+// Logs:
+// [Pan] POST /wallets { userId: 'user_123' }
+// [Pan] 201 Created { id: 'pan_wallet_...', ... }
+```
+
+## Reintentos Automaticos
+
+El SDK reintenta automaticamente en errores transitorios:
+
+```typescript
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!,
+  retries: 3  // Reintenta hasta 3 veces
+});
+
+// Errores que se reintentan:
+// - 429 Rate Limited
+// - 500 Internal Server Error
+// - 503 Service Unavailable
+// - Network errors
+```
+
+### Desactivar Reintentos
+
+```typescript
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!,
+  retries: 0  // Sin reintentos
+});
+```
+
+## Timeout
+
+Configura el timeout global o por request:
+
+```typescript
+// Timeout global
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!,
+  timeout: 60000  // 60 segundos
+});
+
+// Timeout por request (proximo)
+const wallet = await pan.wallet.create(
+  { userId: 'user_123' },
+  { timeout: 10000 }
+);
+```
+
+## Estructura del Cliente
+
+```typescript
+const pan = new Pan({ ... });
+
+// Modulos disponibles
+pan.wallet    // Operaciones de wallet
+pan.yields    // Consulta de APYs
+
+// Metodos de intent directos
+pan.lend()      // Crear intent de lending
+pan.withdraw()  // Crear intent de withdraw
+pan.bridge()    // Crear intent de bridge
+
+// Consulta de intent
+pan.getIntent() // Obtener estado de intent
+```
+
+## Patron Singleton
+
+Para aplicaciones con un solo cliente:
+
+```typescript
+// lib/pan.ts
+import { Pan } from '@pan/sdk';
+
+let panInstance: Pan | null = null;
+
+export function getPan(): Pan {
+  if (!panInstance) {
+    panInstance = new Pan({
+      apiKey: process.env.PAN_API_KEY!
+    });
+  }
+  return panInstance;
+}
+
+// Uso
+import { getPan } from '@/lib/pan';
+
+const pan = getPan();
+const wallet = await pan.wallet.create({ userId: 'user_123' });
+```
+
+## Con React
+
+```typescript
+// context/PanContext.tsx
+import { createContext, useContext, useMemo } from 'react';
+import { Pan } from '@pan/sdk';
+
+const PanContext = createContext<Pan | null>(null);
+
+export function PanProvider({ children, apiKey }) {
+  const pan = useMemo(() => new Pan({ apiKey }), [apiKey]);
+
+  return (
+    <PanContext.Provider value={pan}>
+      {children}
+    </PanContext.Provider>
+  );
+}
+
+export function usePan(): Pan {
+  const pan = useContext(PanContext);
+  if (!pan) {
+    throw new Error('usePan must be used within PanProvider');
+  }
+  return pan;
+}
+```
+
+```tsx
+// app/layout.tsx
+import { PanProvider } from '@/context/PanContext';
+
+export default function Layout({ children }) {
+  return (
+    <PanProvider apiKey={process.env.NEXT_PUBLIC_PAN_API_KEY}>
+      {children}
+    </PanProvider>
+  );
+}
+
+// components/WalletButton.tsx
+import { usePan } from '@/context/PanContext';
+
+function WalletButton({ userId }) {
+  const pan = usePan();
+
+  const createWallet = async () => {
+    const wallet = await pan.wallet.create({ userId });
+    console.log('Wallet:', wallet.address);
+  };
+
+  return <button onClick={createWallet}>Crear Wallet</button>;
+}
+```
+
+## Con Next.js Server Actions
+
+```typescript
+// app/actions/pan.ts
+'use server';
+
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!
+});
+
+export async function createWallet(userId: string) {
+  return await pan.wallet.create({ userId });
+}
+
+export async function getBalances(walletId: string) {
+  return await pan.wallet.getBalances(walletId);
+}
+
+export async function lend(params: {
+  walletId: string;
+  amount: number;
+  asset: string;
+}) {
+  return await pan.lend(params);
+}
+```

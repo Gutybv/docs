@@ -1,0 +1,838 @@
+---
+title: "Fintech Basico"
+description: "Ejemplo completo de integracion con una fintech"
+---
+
+## Caso de Uso
+
+Una fintech latinoamericana quiere ofrecer a sus usuarios:
+- Cuentas con rendimiento en dolares
+- Depositos desde cualquier wallet
+- Retiros instantaneos
+
+## Arquitectura
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        App Movil Fintech                            │
+│                    (React Native / Flutter)                         │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Backend Fintech                             │
+│                       (Node.js + Express)                           │
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │ Auth Service │  │ Pan Service  │  │ User Service │              │
+│  └──────────────┘  └──────────────┘  └──────────────┘              │
+│                                                                     │
+│  ┌──────────────────────────────────────────────────┐              │
+│  │              PostgreSQL Database                  │              │
+│  └──────────────────────────────────────────────────┘              │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                           Pan API                                   │
+│              (Wallets + Intents + Yields)                           │
+└─────────────────────────────────────────────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Blockchain (DeFi)                              │
+│           Ethereum │ Arbitrum │ Base │ Aave │ Across                │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## Implementacion Paso a Paso
+
+### 1. Configuracion del Proyecto
+
+```bash
+# Crear proyecto
+mkdir fintech-savings && cd fintech-savings
+npm init -y
+
+# Instalar dependencias
+npm install express @pan/sdk prisma @prisma/client dotenv zod
+npm install -D typescript @types/express @types/node ts-node
+
+# Inicializar TypeScript y Prisma
+npx tsc --init
+npx prisma init
+```
+
+### 2. Modelo de Datos
+
+```prisma
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+
+  // Pan integration
+  panWalletId   String?  @unique
+  walletAddress String?
+
+  // Relations
+  accounts      Account[]
+  transactions  Transaction[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Account {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  // Tipo de cuenta
+  type          AccountType @default(SAVINGS)
+  currency      String      @default("USDC")
+
+  // Balance cacheado (se actualiza periodicamente)
+  balanceCache  Float       @default(0)
+  lastSyncAt    DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Transaction {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  // Pan tracking
+  panIntentId   String?  @unique
+
+  // Transaction details
+  type          TransactionType
+  amount        Float
+  currency      String   @default("USDC")
+  status        TransactionStatus @default(PENDING)
+
+  // Blockchain info
+  txHashes      String[]
+  gasCostUsd    Float?
+
+  // Metadata
+  description   String?
+  errorMessage  String?
+
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum AccountType {
+  SAVINGS
+  CHECKING
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  INTEREST
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+```
+
+### 3. Servicio de Pan
+
+```typescript
+// src/services/pan.service.ts
+import { Pan, Wallet, Balances, Intent, PanError } from '@pan/sdk';
+import { prisma } from '../lib/prisma';
+
+class PanService {
+  private pan: Pan;
+
+  constructor() {
+    this.pan = new Pan({
+      apiKey: process.env.PAN_API_KEY!,
+      environment: process.env.NODE_ENV === 'production' ? 'production' : 'staging'
+    });
+  }
+
+  // ============================================
+  // WALLETS
+  // ============================================
+
+  async getOrCreateWallet(userId: string, email?: string): Promise<Wallet> {
+    // Buscar usuario
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    // Si ya tiene wallet, retornarla
+    if (user.panWalletId) {
+      return await this.pan.wallet.get(userId);
+    }
+
+    // Crear wallet nueva
+    try {
+      const wallet = await this.pan.wallet.create({
+        userId,
+        email: email || user.email,
+        metadata: {
+          source: 'fintech-app',
+          createdAt: new Date().toISOString()
+        }
+      });
+
+      // Guardar en DB
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          panWalletId: wallet.id,
+          walletAddress: wallet.address
+        }
+      });
+
+      // Crear cuenta de ahorros
+      await prisma.account.create({
+        data: {
+          userId,
+          type: 'SAVINGS',
+          currency: 'USDC'
+        }
+      });
+
+      return wallet;
+    } catch (error) {
+      if (error instanceof PanError && error.code === 'WALLET_ALREADY_EXISTS') {
+        // Wallet existe pero no esta en nuestra DB
+        const wallet = await this.pan.wallet.get(userId);
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            panWalletId: wallet.id,
+            walletAddress: wallet.address
+          }
+        });
+
+        return wallet;
+      }
+      throw error;
+    }
+  }
+
+  async getWalletAddress(userId: string): Promise<string> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user?.walletAddress) {
+      const wallet = await this.getOrCreateWallet(userId);
+      return wallet.address;
+    }
+
+    return user.walletAddress;
+  }
+
+  // ============================================
+  // BALANCES
+  // ============================================
+
+  async getBalances(userId: string): Promise<Balances> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user?.panWalletId) {
+      throw new Error('Usuario no tiene wallet');
+    }
+
+    return await this.pan.wallet.getBalances(user.panWalletId);
+  }
+
+  async getTotalUSDC(userId: string): Promise<number> {
+    const balances = await this.getBalances(userId);
+
+    let total = 0;
+    for (const [chain, tokens] of Object.entries(balances.balances)) {
+      const usdc = tokens.find(t => t.symbol === 'USDC');
+      if (usdc) {
+        total += parseFloat(usdc.balanceFormatted);
+      }
+    }
+
+    // Actualizar cache
+    await prisma.account.updateMany({
+      where: { userId, currency: 'USDC' },
+      data: {
+        balanceCache: total,
+        lastSyncAt: new Date()
+      }
+    });
+
+    return total;
+  }
+
+  // ============================================
+  // DEPOSITOS (LENDING)
+  // ============================================
+
+  async deposit(userId: string, amount: number): Promise<Transaction> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user?.panWalletId) {
+      throw new Error('Usuario no tiene wallet');
+    }
+
+    // Verificar fondos
+    const totalUSDC = await this.getTotalUSDC(userId);
+    if (totalUSDC < amount) {
+      throw new Error(`Fondos insuficientes. Tienes ${totalUSDC} USDC, necesitas ${amount} USDC`);
+    }
+
+    // Crear transaccion en DB
+    const transaction = await prisma.transaction.create({
+      data: {
+        userId,
+        type: 'DEPOSIT',
+        amount,
+        currency: 'USDC',
+        status: 'PENDING',
+        description: `Deposito de ${amount} USDC en cuenta de ahorros`
+      }
+    });
+
+    try {
+      // Crear intent de lending
+      const intent = await this.pan.lend({
+        walletId: user.panWalletId,
+        amount,
+        asset: 'USDC'
+      });
+
+      // Actualizar transaccion con intent
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          panIntentId: intent.id,
+          status: 'PROCESSING'
+        }
+      });
+
+      // Iniciar monitoreo en background
+      this.monitorIntent(intent.id, transaction.id);
+
+      return transaction;
+    } catch (error) {
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: error instanceof Error ? error.message : 'Error desconocido'
+        }
+      });
+      throw error;
+    }
+  }
+
+  // ============================================
+  // RETIROS (WITHDRAW)
+  // ============================================
+
+  async withdraw(userId: string, amount: number, destinationAddress?: string): Promise<Transaction> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user?.panWalletId) {
+      throw new Error('Usuario no tiene wallet');
+    }
+
+    // Crear transaccion
+    const transaction = await prisma.transaction.create({
+      data: {
+        userId,
+        type: 'WITHDRAWAL',
+        amount,
+        currency: 'USDC',
+        status: 'PENDING',
+        description: `Retiro de ${amount} USDC`
+      }
+    });
+
+    try {
+      // Crear intent de withdraw
+      const intent = await this.pan.withdraw({
+        walletId: user.panWalletId,
+        amount,
+        asset: 'USDC',
+        destination: destinationAddress || user.walletAddress!
+      });
+
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          panIntentId: intent.id,
+          status: 'PROCESSING'
+        }
+      });
+
+      this.monitorIntent(intent.id, transaction.id);
+
+      return transaction;
+    } catch (error) {
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: error instanceof Error ? error.message : 'Error desconocido'
+        }
+      });
+      throw error;
+    }
+  }
+
+  // ============================================
+  // YIELDS
+  // ============================================
+
+  async getCurrentAPY(): Promise<number> {
+    const yields = await this.pan.yields.getAll();
+
+    // Obtener mejor APY de USDC
+    const usdcYields = yields.yields.filter(y => y.asset === 'USDC');
+
+    if (usdcYields.length === 0) {
+      return 0;
+    }
+
+    return Math.max(...usdcYields.map(y => y.apy));
+  }
+
+  // ============================================
+  // MONITOREO
+  // ============================================
+
+  private async monitorIntent(intentId: string, transactionId: string): Promise<void> {
+    const maxAttempts = 60;
+    const interval = 5000;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const intent = await this.pan.getIntent(intentId);
+
+        if (intent.status === 'completed') {
+          await prisma.transaction.update({
+            where: { id: transactionId },
+            data: {
+              status: 'COMPLETED',
+              txHashes: intent.txHashes || [],
+              gasCostUsd: intent.gasCostUsd,
+              completedAt: new Date()
+            }
+          });
+          return;
+        }
+
+        if (intent.status === 'failed') {
+          await prisma.transaction.update({
+            where: { id: transactionId },
+            data: {
+              status: 'FAILED',
+              errorMessage: intent.error?.message || 'Intent fallido'
+            }
+          });
+          return;
+        }
+
+        await new Promise(r => setTimeout(r, interval));
+      } catch (error) {
+        console.error(`Error monitoreando intent ${intentId}:`, error);
+      }
+    }
+
+    // Timeout
+    await prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        status: 'FAILED',
+        errorMessage: 'Timeout esperando confirmacion'
+      }
+    });
+  }
+}
+
+export const panService = new PanService();
+```
+
+### 4. API Routes
+
+```typescript
+// src/routes/accounts.ts
+import { Router } from 'express';
+import { z } from 'zod';
+import { panService } from '../services/pan.service';
+import { authMiddleware } from '../middleware/auth';
+
+const router = Router();
+
+// Obtener cuenta y balances
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+
+    const [wallet, totalUSDC, apy] = await Promise.all([
+      panService.getOrCreateWallet(userId),
+      panService.getTotalUSDC(userId),
+      panService.getCurrentAPY()
+    ]);
+
+    res.json({
+      address: wallet.address,
+      balance: {
+        total: totalUSDC,
+        currency: 'USDC',
+        formatted: `$${totalUSDC.toFixed(2)}`
+      },
+      apy: {
+        current: apy,
+        formatted: `${(apy * 100).toFixed(2)}%`
+      },
+      estimatedMonthlyEarnings: totalUSDC * apy / 12
+    });
+  } catch (error) {
+    console.error('Error obteniendo cuenta:', error);
+    res.status(500).json({ error: 'Error obteniendo cuenta' });
+  }
+});
+
+// Depositar en cuenta de ahorros
+const depositSchema = z.object({
+  amount: z.number().positive().max(1000000)
+});
+
+router.post('/deposit', authMiddleware, async (req, res) => {
+  try {
+    const { amount } = depositSchema.parse(req.body);
+    const userId = req.user!.id;
+
+    const transaction = await panService.deposit(userId, amount);
+
+    res.json({
+      transactionId: transaction.id,
+      status: 'processing',
+      message: `Depositando ${amount} USDC en tu cuenta de ahorros`
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Monto invalido' });
+    }
+    console.error('Error en deposito:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Error en deposito'
+    });
+  }
+});
+
+// Retirar de cuenta de ahorros
+const withdrawSchema = z.object({
+  amount: z.number().positive().max(1000000),
+  destinationAddress: z.string().optional()
+});
+
+router.post('/withdraw', authMiddleware, async (req, res) => {
+  try {
+    const { amount, destinationAddress } = withdrawSchema.parse(req.body);
+    const userId = req.user!.id;
+
+    const transaction = await panService.withdraw(userId, amount, destinationAddress);
+
+    res.json({
+      transactionId: transaction.id,
+      status: 'processing',
+      message: `Retirando ${amount} USDC`
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: 'Datos invalidos' });
+    }
+    console.error('Error en retiro:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Error en retiro'
+    });
+  }
+});
+
+// Historial de transacciones
+router.get('/transactions', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const transactions = await prisma.transaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset
+    });
+
+    res.json({
+      transactions: transactions.map(tx => ({
+        id: tx.id,
+        type: tx.type,
+        amount: tx.amount,
+        currency: tx.currency,
+        status: tx.status,
+        description: tx.description,
+        createdAt: tx.createdAt,
+        completedAt: tx.completedAt
+      })),
+      pagination: {
+        limit,
+        offset,
+        hasMore: transactions.length === limit
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo transacciones:', error);
+    res.status(500).json({ error: 'Error obteniendo transacciones' });
+  }
+});
+
+// Estado de transaccion especifica
+router.get('/transactions/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    const transaction = await prisma.transaction.findFirst({
+      where: { id, userId }
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaccion no encontrada' });
+    }
+
+    res.json(transaction);
+  } catch (error) {
+    console.error('Error obteniendo transaccion:', error);
+    res.status(500).json({ error: 'Error obteniendo transaccion' });
+  }
+});
+
+export default router;
+```
+
+### 5. App Principal
+
+```typescript
+// src/app.ts
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import accountsRouter from './routes/accounts';
+
+const app = express();
+
+// Middleware
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+
+// Routes
+app.use('/api/accounts', accountsRouter);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Error handler
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en puerto ${PORT}`);
+});
+```
+
+### 6. Variables de Entorno
+
+```env
+# .env
+NODE_ENV=development
+PORT=3000
+
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/fintech
+
+# Pan API
+PAN_API_KEY=pan_sk_test_xxxxx
+
+# JWT (para autenticacion de usuarios)
+JWT_SECRET=tu-secreto-muy-seguro
+```
+
+## Flujo de Usuario
+
+### Registro y Creacion de Wallet
+
+```typescript
+// El usuario se registra en la app
+const user = await registerUser(email, password);
+
+// Automaticamente creamos su wallet Pan
+const wallet = await panService.getOrCreateWallet(user.id, email);
+
+// Usuario puede ver su direccion para depositos
+console.log(`Direccion para depositos: ${wallet.address}`);
+```
+
+### Deposito en Cuenta de Ahorros
+
+```typescript
+// Usuario tiene USDC en su wallet (envio externo o compra)
+// Quiere depositarlo en la cuenta de ahorros
+
+// 1. Verificar balance
+const balance = await panService.getTotalUSDC(userId);
+console.log(`Balance disponible: ${balance} USDC`);
+
+// 2. Depositar
+const tx = await panService.deposit(userId, 100);
+console.log(`Deposito iniciado: ${tx.id}`);
+
+// 3. El intent se ejecuta automaticamente
+// - Pan consolida USDC de todas las chains
+// - Deposita en Aave para generar rendimiento
+// - La transaccion se marca como completada
+```
+
+### Consulta de Rendimientos
+
+```typescript
+// Obtener APY actual
+const apy = await panService.getCurrentAPY();
+console.log(`APY actual: ${(apy * 100).toFixed(2)}%`);
+
+// Calcular ganancias estimadas
+const balance = 1000; // USDC
+const monthlyEarnings = balance * apy / 12;
+const yearlyEarnings = balance * apy;
+
+console.log(`Ganancias mensuales estimadas: $${monthlyEarnings.toFixed(2)}`);
+console.log(`Ganancias anuales estimadas: $${yearlyEarnings.toFixed(2)}`);
+```
+
+### Retiro
+
+```typescript
+// Usuario quiere retirar a su wallet
+const tx = await panService.withdraw(userId, 50);
+
+// O a una direccion externa
+const tx = await panService.withdraw(userId, 50, '0xExternalAddress...');
+```
+
+## Consideraciones de Produccion
+
+### Seguridad
+
+```typescript
+// Rate limiting
+import rateLimit from 'express-rate-limit';
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // max requests por ventana
+  message: 'Demasiadas solicitudes, intenta mas tarde'
+});
+
+app.use('/api/', limiter);
+```
+
+### Monitoreo
+
+```typescript
+// Logging estructurado
+import pino from 'pino';
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info'
+});
+
+// Metricas
+import { Counter, Histogram } from 'prom-client';
+
+const depositCounter = new Counter({
+  name: 'deposits_total',
+  help: 'Total de depositos'
+});
+
+const depositDuration = new Histogram({
+  name: 'deposit_duration_seconds',
+  help: 'Duracion de depositos'
+});
+```
+
+### Escalabilidad
+
+```typescript
+// Cola de trabajos para monitoreo de intents
+import Bull from 'bull';
+
+const intentQueue = new Bull('intent-monitor', {
+  redis: process.env.REDIS_URL
+});
+
+intentQueue.process(async (job) => {
+  const { intentId, transactionId } = job.data;
+  await panService.monitorIntent(intentId, transactionId);
+});
+
+// En lugar de monitorear en el mismo proceso
+intentQueue.add({ intentId, transactionId });
+```
+
+## Resultado Final
+
+Con esta implementacion, tu fintech puede:
+
+1. **Crear cuentas** automaticamente para cada usuario
+2. **Aceptar depositos** en cualquier chain soportada
+3. **Generar rendimiento** automatico con los mejores APYs
+4. **Procesar retiros** de forma instantanea
+5. **Mostrar historial** completo de transacciones
+
+Todo esto con una integracion simple a Pan API, sin necesidad de:
+- Gestionar wallets manualmente
+- Interactuar directamente con blockchains
+- Implementar bridges o swaps
+- Integrar protocolos DeFi individualmente

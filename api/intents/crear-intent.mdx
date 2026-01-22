@@ -1,0 +1,205 @@
+---
+title: "Crear Intent"
+description: "POST /v1/intents"
+---
+
+Crea y ejecuta un intent DeFi.
+
+## Endpoint
+
+```
+POST https://api.pan.dev/v1/intents
+```
+
+## Autenticacion
+
+<Note>
+  Solo API Key. X402 no soportado para operaciones de escritura.
+</Note>
+
+## Request
+
+### Body - Lend
+
+```json
+{
+  "walletId": "pan_wallet_abc123",
+  "action": "lend",
+  "amount": 1000,
+  "asset": "USDC",
+  "chain": "base"
+}
+```
+
+### Body - Withdraw
+
+```json
+{
+  "walletId": "pan_wallet_abc123",
+  "action": "withdraw",
+  "amount": 500,
+  "asset": "USDC",
+  "chain": "base"
+}
+```
+
+### Body - Bridge
+
+```json
+{
+  "walletId": "pan_wallet_abc123",
+  "action": "bridge",
+  "amount": 500,
+  "asset": "USDC",
+  "fromChain": "ethereum",
+  "toChain": "arbitrum"
+}
+```
+
+### Parametros
+
+| Campo | Tipo | Requerido | Descripcion |
+|-------|------|-----------|-------------|
+| `walletId` | string | Si | ID de la wallet |
+| `action` | string | Si | `lend`, `withdraw`, o `bridge` |
+| `amount` | number | Si | Cantidad en unidades del token |
+| `asset` | string | No | Token (default: `USDC`) |
+| `chain` | string | Depende | Requerido para withdraw |
+| `fromChain` | string | Depende | Requerido para bridge |
+| `toChain` | string | Depende | Requerido para bridge |
+
+## Response
+
+### 201 Created
+
+```json
+{
+  "id": "intent_xyz789abc123",
+  "walletId": "pan_wallet_abc123",
+  "status": "planning",
+  "action": "lend",
+  "amount": 1000,
+  "asset": "USDC",
+  "executionPlan": {
+    "strategy": "single-bridge",
+    "targetChain": "base",
+    "targetProtocol": "aave",
+    "expectedApy": 8.52,
+    "steps": [
+      {
+        "type": "bridge",
+        "sequence": 1,
+        "from": "arbitrum",
+        "to": "base",
+        "asset": "USDC",
+        "amount": "1000"
+      },
+      {
+        "type": "deposit",
+        "sequence": 2,
+        "chain": "base",
+        "protocol": "aave",
+        "amount": "998.50"
+      }
+    ],
+    "estimatedGasUsd": 2.50,
+    "estimatedTime": "3-7 min"
+  },
+  "createdAt": "2024-01-15T10:40:00Z"
+}
+```
+
+### Estados
+
+| Estado | Descripcion |
+|--------|-------------|
+| `pending` | Creado, esperando procesamiento |
+| `planning` | Generando plan de ejecucion |
+| `executing` | Ejecutando transacciones |
+| `completed` | Completado exitosamente |
+| `failed` | Error durante ejecucion |
+
+### Errores
+
+| Codigo | Error | Descripcion |
+|--------|-------|-------------|
+| 400 | INVALID_REQUEST | Parametros invalidos |
+| 400 | INSUFFICIENT_FUNDS | Fondos insuficientes |
+| 401 | UNAUTHORIZED | API key invalida |
+| 404 | WALLET_NOT_FOUND | Wallet no existe |
+
+## Ejemplos
+
+<CodeGroup>
+```bash cURL - Lend
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "action": "lend",
+    "amount": 1000,
+    "asset": "USDC"
+  }'
+```
+
+```bash cURL - Withdraw
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "action": "withdraw",
+    "amount": 500,
+    "asset": "USDC",
+    "chain": "base"
+  }'
+```
+
+```bash cURL - Bridge
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "action": "bridge",
+    "amount": 500,
+    "asset": "USDC",
+    "fromChain": "ethereum",
+    "toChain": "arbitrum"
+  }'
+```
+
+```typescript SDK - Lend
+const intent = await pan.lend({
+  walletId: 'pan_wallet_abc123',
+  amount: 1000,
+  asset: 'USDC'
+});
+```
+
+```typescript SDK - Withdraw
+const intent = await pan.withdraw({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  chain: 'base'
+});
+```
+
+```typescript SDK - Bridge
+const intent = await pan.bridge({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  fromChain: 'ethereum',
+  toChain: 'arbitrum'
+});
+```
+</CodeGroup>
+
+## Notas
+
+- La ejecucion es asincrona. Usa GET /intents/:id para monitorear
+- Para `lend`, si no especificas `chain`, Pan elige el mejor APY
+- Los intents consumen 5 creditos

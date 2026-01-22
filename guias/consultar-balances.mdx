@@ -1,0 +1,484 @@
+---
+title: "Consultar Balances"
+description: "Como consultar y mostrar balances de wallets multi-chain"
+---
+
+Esta guia te muestra como consultar balances de wallets, interpretar la respuesta, y mostrar la informacion a tus usuarios.
+
+## Consulta Basica
+
+<CodeGroup>
+```javascript JavaScript
+const balances = await pan.wallet.getBalances('pan_wallet_abc123');
+
+console.log('Total USD:', balances.totalUsdValue);
+console.log('Balances:', balances.balances);
+```
+
+```python Python
+response = requests.get(
+    f'{BASE_URL}/balances/pan_wallet_abc123',
+    headers=headers
+)
+balances = response.json()
+print(f"Total: ${balances['totalUsdValue']}")
+```
+
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/balances/pan_wallet_abc123" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+</CodeGroup>
+
+## Estructura de Respuesta
+
+```json
+{
+  "walletId": "pan_wallet_abc123",
+  "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "balances": {
+    "ethereum": [
+      {
+        "symbol": "USDC",
+        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "balance": "200000000",
+        "balanceFormatted": "200.00",
+        "decimals": 6,
+        "usdValue": 200.00
+      },
+      {
+        "symbol": "ETH",
+        "address": "0x0000000000000000000000000000000000000000",
+        "balance": "500000000000000000",
+        "balanceFormatted": "0.50",
+        "decimals": 18,
+        "usdValue": 1250.00
+      }
+    ],
+    "arbitrum": [
+      {
+        "symbol": "USDC",
+        "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "balance": "500000000",
+        "balanceFormatted": "500.00",
+        "decimals": 6,
+        "usdValue": 500.00
+      }
+    ],
+    "base": []
+  },
+  "totalUsdValue": 1950.00,
+  "updatedAt": "2024-01-15T10:35:00Z"
+}
+```
+
+### Campos de Token
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `symbol` | string | Simbolo del token (USDC, ETH) |
+| `address` | string | Direccion del contrato |
+| `balance` | string | Balance en unidades minimas |
+| `balanceFormatted` | string | Balance con decimales |
+| `decimals` | number | Decimales del token |
+| `usdValue` | number | Valor en USD |
+
+## Formatear para UI
+
+```javascript
+function formatearBalances(response) {
+  const items = [];
+
+  for (const [chain, tokens] of Object.entries(response.balances)) {
+    for (const token of tokens) {
+      // Ignorar balances cero
+      if (parseFloat(token.balanceFormatted) === 0) continue;
+
+      items.push({
+        chain: formatearNombreChain(chain),
+        chainId: chain,
+        token: token.symbol,
+        amount: formatearNumero(token.balanceFormatted),
+        usd: formatearMoneda(token.usdValue),
+        icon: getTokenIcon(token.symbol),
+        explorerUrl: getExplorerUrl(chain, response.address)
+      });
+    }
+  }
+
+  // Ordenar por valor USD descendente
+  items.sort((a, b) => b.usdValue - a.usdValue);
+
+  return {
+    address: response.address,
+    items,
+    total: formatearMoneda(response.totalUsdValue),
+    updatedAt: new Date(response.updatedAt).toLocaleString()
+  };
+}
+
+function formatearNombreChain(chain) {
+  const nombres = {
+    'ethereum': 'Ethereum',
+    'ethereum-sepolia': 'Ethereum (Testnet)',
+    'arbitrum': 'Arbitrum',
+    'arbitrum-sepolia': 'Arbitrum (Testnet)',
+    'base': 'Base',
+    'base-sepolia': 'Base (Testnet)'
+  };
+  return nombres[chain] || chain;
+}
+
+function formatearNumero(valor) {
+  const num = parseFloat(valor);
+  if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+  if (num >= 1) return num.toFixed(2);
+  return num.toFixed(6);
+}
+
+function formatearMoneda(valor) {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'USD'
+  }).format(valor);
+}
+```
+
+## Calcular Total por Asset
+
+```javascript
+function calcularTotalesPorAsset(balances) {
+  const totales = {};
+
+  for (const [chain, tokens] of Object.entries(balances)) {
+    for (const token of tokens) {
+      const symbol = token.symbol;
+
+      if (!totales[symbol]) {
+        totales[symbol] = {
+          symbol,
+          totalBalance: 0,
+          totalUsd: 0,
+          chains: []
+        };
+      }
+
+      const balance = parseFloat(token.balanceFormatted);
+      totales[symbol].totalBalance += balance;
+      totales[symbol].totalUsd += token.usdValue;
+      totales[symbol].chains.push({
+        chain,
+        balance,
+        usd: token.usdValue
+      });
+    }
+  }
+
+  return Object.values(totales);
+}
+
+// Uso
+const { balances } = await pan.wallet.getBalances(walletId);
+const porAsset = calcularTotalesPorAsset(balances);
+
+console.log('USDC total:', porAsset.find(a => a.symbol === 'USDC'));
+// { symbol: 'USDC', totalBalance: 1000, totalUsd: 1000, chains: [...] }
+```
+
+## Verificar Fondos Suficientes
+
+```javascript
+async function verificarFondos(walletId, asset, cantidadRequerida) {
+  const { balances } = await pan.wallet.getBalances(walletId);
+
+  let disponible = 0;
+  const fuentes = [];
+
+  for (const [chain, tokens] of Object.entries(balances)) {
+    const token = tokens.find(t => t.symbol === asset);
+    if (token) {
+      const balance = parseFloat(token.balanceFormatted);
+      disponible += balance;
+      if (balance > 0) {
+        fuentes.push({ chain, balance });
+      }
+    }
+  }
+
+  return {
+    suficiente: disponible >= cantidadRequerida,
+    disponible,
+    requerido: cantidadRequerida,
+    faltante: Math.max(0, cantidadRequerida - disponible),
+    fuentes
+  };
+}
+
+// Uso
+const check = await verificarFondos('wallet_123', 'USDC', 1000);
+
+if (!check.suficiente) {
+  console.log(`Faltan ${check.faltante} USDC`);
+  console.log('Deposita mas fondos para continuar');
+} else {
+  console.log('Fondos suficientes');
+  console.log('Disponible en:', check.fuentes);
+}
+```
+
+## Componente React de Balances
+
+```jsx
+import { useState, useEffect } from 'react';
+
+function BalanceCard({ walletId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const cargar = async () => {
+    try {
+      setLoading(true);
+      const response = await pan.wallet.getBalances(walletId);
+      setData(formatearBalances(response));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargar();
+  }, [walletId]);
+
+  if (loading) return <div className="skeleton" />;
+  if (error) return <div className="error">{error}</div>;
+  if (!data) return null;
+
+  return (
+    <div className="balance-card">
+      <div className="header">
+        <h3>Balances</h3>
+        <button onClick={cargar} className="refresh">
+          Actualizar
+        </button>
+      </div>
+
+      <div className="address">
+        <span className="label">Direccion:</span>
+        <code>{data.address}</code>
+        <button onClick={() => navigator.clipboard.writeText(data.address)}>
+          Copiar
+        </button>
+      </div>
+
+      {data.items.length === 0 ? (
+        <div className="empty">
+          <p>Sin balances</p>
+          <p>Deposita fondos a tu direccion para comenzar</p>
+        </div>
+      ) : (
+        <>
+          <div className="balances">
+            {data.items.map((item, i) => (
+              <div key={i} className="balance-row">
+                <div className="token">
+                  <img src={item.icon} alt={item.token} />
+                  <div>
+                    <span className="symbol">{item.token}</span>
+                    <span className="chain">{item.chain}</span>
+                  </div>
+                </div>
+                <div className="amounts">
+                  <span className="amount">{item.amount}</span>
+                  <span className="usd">{item.usd}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="total">
+            <span>Total</span>
+            <span className="total-usd">{data.total}</span>
+          </div>
+        </>
+      )}
+
+      <div className="updated">
+        Actualizado: {data.updatedAt}
+      </div>
+    </div>
+  );
+}
+```
+
+## Hook de Balances con Auto-refresh
+
+```javascript
+import { useState, useEffect, useCallback } from 'react';
+
+function useBalances(walletId, { autoRefresh = false, interval = 30000 } = {}) {
+  const [balances, setBalances] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetch = useCallback(async () => {
+    try {
+      const data = await pan.wallet.getBalances(walletId);
+      setBalances(data);
+      setError(null);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [walletId]);
+
+  // Carga inicial
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  // Auto-refresh
+  useEffect(() => {
+    if (!autoRefresh) return;
+
+    const timer = setInterval(fetch, interval);
+    return () => clearInterval(timer);
+  }, [autoRefresh, interval, fetch]);
+
+  // Helpers
+  const getTotal = (asset) => {
+    if (!balances) return 0;
+
+    let total = 0;
+    for (const tokens of Object.values(balances.balances)) {
+      const token = tokens.find(t => t.symbol === asset);
+      if (token) total += parseFloat(token.balanceFormatted);
+    }
+    return total;
+  };
+
+  const hasFunds = (asset, amount) => {
+    return getTotal(asset) >= amount;
+  };
+
+  return {
+    balances,
+    loading,
+    error,
+    refresh: fetch,
+    getTotal,
+    hasFunds,
+    totalUsd: balances?.totalUsdValue || 0
+  };
+}
+
+// Uso
+function WalletPage({ walletId }) {
+  const {
+    balances,
+    loading,
+    refresh,
+    getTotal,
+    hasFunds,
+    totalUsd
+  } = useBalances(walletId, { autoRefresh: true, interval: 60000 });
+
+  const usdcTotal = getTotal('USDC');
+  const puedePrestar = hasFunds('USDC', 100);
+
+  return (
+    <div>
+      <h2>Total: ${totalUsd.toFixed(2)}</h2>
+      <p>USDC: {usdcTotal}</p>
+      {puedePrestar && <button>Prestar</button>}
+      <button onClick={refresh}>Actualizar</button>
+    </div>
+  );
+}
+```
+
+## Polling Eficiente
+
+```javascript
+class BalanceWatcher {
+  constructor(walletId, onChange) {
+    this.walletId = walletId;
+    this.onChange = onChange;
+    this.lastHash = null;
+    this.interval = null;
+  }
+
+  async check() {
+    const balances = await pan.wallet.getBalances(this.walletId);
+
+    // Crear hash simple de balances
+    const hash = JSON.stringify(balances.balances);
+
+    // Solo notificar si cambio
+    if (hash !== this.lastHash) {
+      this.lastHash = hash;
+      this.onChange(balances);
+    }
+  }
+
+  start(intervalMs = 30000) {
+    this.check(); // Inmediato
+    this.interval = setInterval(() => this.check(), intervalMs);
+  }
+
+  stop() {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
+}
+
+// Uso
+const watcher = new BalanceWatcher('wallet_123', (balances) => {
+  console.log('Balances actualizados:', balances.totalUsdValue);
+  actualizarUI(balances);
+});
+
+watcher.start(30000); // Cada 30 segundos
+
+// Detener cuando no se necesite
+watcher.stop();
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Obtener Yields"
+    icon="percent"
+    href="/guias/obtener-yields"
+  >
+    Consultar APYs disponibles
+  </Card>
+  <Card
+    title="Ejecutar Intents"
+    icon="target"
+    href="/guias/ejecutar-intents"
+  >
+    Operar con tus balances
+  </Card>
+  <Card
+    title="API de Balances"
+    icon="terminal"
+    href="/api/wallets/obtener-balances"
+  >
+    Referencia del endpoint
+  </Card>
+  <Card
+    title="Rendimiento"
+    icon="bolt"
+    href="/guias/mejores-practicas/rendimiento"
+  >
+    Optimizar consultas
+  </Card>
+</CardGroup>

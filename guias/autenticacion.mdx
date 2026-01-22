@@ -1,0 +1,456 @@
+---
+title: "Autenticacion"
+description: "Todo sobre como autenticar tus requests a Pan API"
+---
+
+Pan API soporta multiples metodos de autenticacion para diferentes casos de uso. Esta guia cubre todos los metodos disponibles, cuando usar cada uno, y mejores practicas de seguridad.
+
+## Metodos de Autenticacion
+
+<CardGroup cols={3}>
+  <Card title="API Key" icon="key">
+    Autenticacion principal para integraciones servidor-a-servidor
+  </Card>
+  <Card title="X402 Protocol" icon="coins">
+    Pago por uso sin necesidad de cuenta (solo lectura)
+  </Card>
+  <Card title="Stack Auth" icon="user">
+    Autenticacion de usuarios para el dashboard
+  </Card>
+</CardGroup>
+
+## API Key (Recomendado)
+
+La autenticacion por API Key es el metodo principal y recomendado para la mayoria de las integraciones.
+
+### Formato de API Key
+
+Las API keys de Pan tienen el siguiente formato:
+
+```
+pan_sk_a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
+```
+
+- **Prefijo**: `pan_sk_` (identifica que es una key de Pan)
+- **Cuerpo**: 64 caracteres hexadecimales (256 bits de entropia)
+
+### Como Usar
+
+Incluye tu API key en el header `Authorization` de cada request:
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://api.pan.dev/v1/wallets/user_123 \
+  -H "Authorization: Bearer pan_sk_tu_api_key_aqui"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.pan.dev/v1/wallets/user_123', {
+  headers: {
+    'Authorization': `Bearer ${process.env.PAN_API_KEY}`
+  }
+});
+```
+
+```python Python
+import os
+import requests
+
+response = requests.get(
+    'https://api.pan.dev/v1/wallets/user_123',
+    headers={
+        'Authorization': f"Bearer {os.getenv('PAN_API_KEY')}"
+    }
+)
+```
+
+```typescript TypeScript (SDK)
+import { Pan } from '@pan/sdk';
+
+// El SDK maneja la autenticacion automaticamente
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+```
+</CodeGroup>
+
+### Obtener tu API Key
+
+1. Inicia sesion en [app.pan.dev](https://app.pan.dev)
+2. Navega a **Settings > API Keys**
+3. Click en **Create New Key**
+4. Copia la key inmediatamente (solo se muestra una vez)
+
+<Warning>
+  **Guarda tu API key de forma segura**. No podras verla de nuevo despues de cerrar el modal. Si la pierdes, deberas crear una nueva.
+</Warning>
+
+### Multiples API Keys
+
+Puedes crear multiples API keys para diferentes propositos:
+
+| Uso | Recomendacion |
+|-----|---------------|
+| Desarrollo | Key separada con prefijo `dev_` en metadata |
+| Staging | Key separada con acceso limitado |
+| Produccion | Key principal, bien protegida |
+| CI/CD | Key con permisos minimos necesarios |
+
+```javascript
+// Ejemplo: usar diferentes keys por entorno
+const apiKey = process.env.NODE_ENV === 'production'
+  ? process.env.PAN_API_KEY_PROD
+  : process.env.PAN_API_KEY_DEV;
+
+const pan = new Pan({ apiKey });
+```
+
+### Revocar API Keys
+
+Si sospechas que tu API key fue comprometida:
+
+1. Ve a **Settings > API Keys** en el dashboard
+2. Encuentra la key comprometida
+3. Click en **Revoke**
+4. Crea una nueva key
+5. Actualiza tu aplicacion con la nueva key
+
+<Note>
+  Las keys revocadas dejan de funcionar inmediatamente. Asegurate de tener la nueva key lista antes de revocar la anterior.
+</Note>
+
+## Creditos y Facturacion
+
+Cada request a Pan API consume creditos de tu cuenta:
+
+| Endpoint | Creditos |
+|----------|----------|
+| `POST /wallets` | 1 |
+| `GET /wallets/:id` | 1 |
+| `GET /balances/:id` | 1 |
+| `GET /yields` | 1 |
+| `POST /intents` | 5 |
+| `GET /intents/:id` | 1 |
+
+### Planes y Limites
+
+<CardGroup cols={3}>
+  <Card title="Free">
+    - 100 creditos/mes
+    - 100 wallets max
+    - Solo testnets
+  </Card>
+  <Card title="Pro">
+    - 10,000 creditos/mes
+    - 10,000 wallets max
+    - Mainnet habilitado
+  </Card>
+  <Card title="Enterprise">
+    - Creditos ilimitados
+    - Wallets ilimitadas
+    - SLA dedicado
+  </Card>
+</CardGroup>
+
+### Verificar Creditos Restantes
+
+```bash
+curl -X GET https://api.pan.dev/dashboard/credits \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+
+<ResponseExample>
+```json
+{
+  "balance": 8750,
+  "totalPurchased": 10000,
+  "totalUsed": 1250,
+  "plan": "pro",
+  "resetsAt": "2024-02-01T00:00:00Z"
+}
+```
+</ResponseExample>
+
+## X402 Protocol (Pago por Uso)
+
+X402 es un protocolo de micropagos que permite usar la API sin crear una cuenta, pagando por cada request.
+
+### Cuando Usar X402
+
+<Columns cols={2}>
+  <Card title="Usar X402" icon="check">
+    - Integraciones de prueba rapida
+    - Acceso anonimo a la API
+    - Endpoints de solo lectura
+    - Cuando no quieres manejar API keys
+  </Card>
+  <Card title="No Usar X402" icon="xmark">
+    - Operaciones de escritura (crear wallets, intents)
+    - Produccion con alto volumen
+    - Cuando necesitas tracking detallado
+  </Card>
+</Columns>
+
+### Como Funciona
+
+1. **Precio**: Cada request cuesta $0.001 USD
+2. **Pago**: Se realiza en USDC en las redes soportadas (Base, Ethereum, Sei)
+3. **Prueba**: Incluyes un proof de pago en el header `X-Payment-Proof`
+
+### Endpoints Soportados
+
+Solo endpoints de lectura soportan X402:
+
+| Endpoint | X402 |
+|----------|------|
+| `GET /wallets/:userId` | Si |
+| `GET /balances/:walletId` | Si |
+| `GET /yields` | Si |
+| `GET /intents/:intentId` | Si |
+| `POST /wallets` | No |
+| `POST /intents` | No |
+
+### Ejemplo de Uso
+
+```javascript
+import { X402Client } from 'x402-client';
+
+const x402 = new X402Client({
+  network: 'base',
+  wallet: yourWallet // wallet con USDC
+});
+
+// El cliente X402 maneja el pago automaticamente
+const response = await x402.fetch('https://api.pan.dev/v1/yields');
+const yields = await response.json();
+```
+
+<Warning>
+  X402 no esta disponible para operaciones de escritura. Para crear wallets o intents, debes usar API Key.
+</Warning>
+
+## Stack Auth (Dashboard)
+
+Stack Auth se usa exclusivamente para autenticar usuarios en el dashboard web de Pan.
+
+### Flujo de Autenticacion
+
+```
+Usuario → Dashboard Pan → Stack Auth → Sesion creada
+```
+
+### No Usar para API
+
+Stack Auth **no** es para llamadas programaticas a la API. Usa siempre API Key para integraciones servidor-a-servidor.
+
+## Seguridad: Mejores Practicas
+
+### 1. Nunca Expongas tu API Key
+
+<Columns cols={2}>
+  <Card title="MAL" icon="xmark">
+    ```javascript
+    // En el frontend - NUNCA hagas esto
+    const pan = new Pan({
+      apiKey: 'pan_sk_abc123...'
+    });
+    ```
+  </Card>
+  <Card title="BIEN" icon="check">
+    ```javascript
+    // En el backend
+    const pan = new Pan({
+      apiKey: process.env.PAN_API_KEY
+    });
+    ```
+  </Card>
+</Columns>
+
+### 2. Usa Variables de Entorno
+
+```env
+# .env (nunca commitear este archivo)
+PAN_API_KEY=pan_sk_tu_api_key_aqui
+```
+
+```javascript
+// Tu codigo
+const apiKey = process.env.PAN_API_KEY;
+```
+
+### 3. Agrega .env a .gitignore
+
+```gitignore
+# .gitignore
+.env
+.env.local
+.env.*.local
+```
+
+### 4. Usa Secretos en CI/CD
+
+<CodeGroup>
+```yaml GitHub Actions
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        env:
+          PAN_API_KEY: ${{ secrets.PAN_API_KEY }}
+        run: |
+          npm run deploy
+```
+
+```yaml GitLab CI
+deploy:
+  script:
+    - npm run deploy
+  variables:
+    PAN_API_KEY: $PAN_API_KEY
+```
+</CodeGroup>
+
+### 5. Rota Keys Periodicamente
+
+Recomendamos rotar tus API keys cada 90 dias:
+
+1. Crea una nueva key
+2. Actualiza tu aplicacion para usar la nueva key
+3. Verifica que todo funcione
+4. Revoca la key anterior
+
+### 6. Monitorea Uso Inusual
+
+Revisa el dashboard periodicamente para detectar:
+- Picos de uso inesperados
+- Requests desde IPs desconocidas
+- Patrones de uso anomalos
+
+### 7. Usa Keys Diferentes por Entorno
+
+```javascript
+// config.js
+const config = {
+  development: {
+    apiKey: process.env.PAN_API_KEY_DEV,
+    baseUrl: 'https://api-staging.pan.dev/v1'
+  },
+  production: {
+    apiKey: process.env.PAN_API_KEY_PROD,
+    baseUrl: 'https://api.pan.dev/v1'
+  }
+};
+
+export default config[process.env.NODE_ENV];
+```
+
+## Manejo de Errores de Autenticacion
+
+### Error 401: Unauthorized
+
+```json
+{
+  "error": "UNAUTHORIZED",
+  "message": "Invalid or missing API key"
+}
+```
+
+**Causas comunes:**
+- API key faltante en el header
+- API key mal formateada
+- API key revocada
+
+**Solucion:**
+```javascript
+// Verifica que el header este correcto
+headers: {
+  'Authorization': `Bearer ${apiKey}` // Nota el espacio despues de "Bearer"
+}
+```
+
+### Error 403: Forbidden
+
+```json
+{
+  "error": "FORBIDDEN",
+  "message": "Wallet limit exceeded for your plan"
+}
+```
+
+**Causas comunes:**
+- Excediste el limite de wallets de tu plan
+- Intentas acceder a mainnet con plan free
+- API key no tiene permisos para esta operacion
+
+**Solucion:**
+- Actualiza tu plan
+- Revisa los limites de tu cuenta
+
+### Error 429: Rate Limited
+
+```json
+{
+  "error": "RATE_LIMITED",
+  "message": "Too many requests"
+}
+```
+
+**Headers de respuesta:**
+```
+Retry-After: 60
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1642248000
+```
+
+**Solucion:**
+```javascript
+// Implementa exponential backoff
+async function requestWithRetry(fn, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.status === 429) {
+        const retryAfter = error.headers.get('Retry-After') || 60;
+        await new Promise(r => setTimeout(r, retryAfter * 1000));
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Crear Wallets"
+    icon="wallet"
+    href="/guias/crear-wallets"
+  >
+    Aprende a crear y gestionar wallets
+  </Card>
+  <Card
+    title="Ejecutar Intents"
+    icon="target"
+    href="/guias/ejecutar-intents"
+  >
+    Ejecuta tu primera operacion DeFi
+  </Card>
+  <Card
+    title="Seguridad"
+    icon="shield"
+    href="/guias/mejores-practicas/seguridad"
+  >
+    Guia completa de seguridad
+  </Card>
+  <Card
+    title="Referencia API"
+    icon="terminal"
+    href="/api/introduccion"
+  >
+    Documentacion completa de endpoints
+  </Card>
+</CardGroup>

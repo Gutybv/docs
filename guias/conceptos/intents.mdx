@@ -1,0 +1,626 @@
+---
+title: "Intents"
+description: "Entiende como funcionan las operaciones basadas en intents en Pan"
+---
+
+Los Intents son el corazon de Pan API. Representan objetivos financieros de alto nivel en lugar de transacciones especificas. En lugar de decirle a Pan exactamente que transacciones ejecutar, expresas lo que quieres lograr y Pan determina la mejor manera de hacerlo.
+
+## Que es un Intent?
+
+Un intent es una declaracion de un objetivo financiero. Cuando creas un intent, le dices a Pan **que** quieres lograr, no **como** lograrlo.
+
+<Columns cols={2}>
+  <Card title="Enfoque Tradicional" icon="code">
+    ```javascript
+    // Especificas COMO hacerlo
+    await bridge(500, 'arbitrum', 'base');
+    await approve(usdc, aavePool);
+    await aavePool.supply(usdc, 500);
+    ```
+  </Card>
+  <Card title="Enfoque Intent" icon="target">
+    ```javascript
+    // Especificas QUE quieres
+    await pan.lend({
+      walletId: 'wallet_123',
+      amount: 500,
+      asset: 'USDC'
+    });
+    ```
+  </Card>
+</Columns>
+
+El sistema de Pan automaticamente:
+1. Analiza el estado actual del wallet
+2. Evalua protocolos DeFi y oportunidades disponibles
+3. Genera un plan de ejecucion optimizado
+4. Ejecuta el plan de forma segura
+
+## Tipos de Intent
+
+### Lend (Prestar)
+
+Deposita fondos en un protocolo de lending para ganar intereses:
+
+<CodeGroup>
+```javascript JavaScript
+const intent = await pan.lend({
+  walletId: 'pan_wallet_abc123',
+  amount: 1000,
+  asset: 'USDC'
+  // chain es opcional - Pan encuentra el mejor APY
+});
+```
+
+```bash cURL
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "action": "lend",
+    "amount": 1000,
+    "asset": "USDC"
+  }'
+```
+</CodeGroup>
+
+**Que hace Pan:**
+- Consulta APYs en todas las chains soportadas
+- Identifica donde estan los fondos del wallet
+- Si es necesario, hace bridge a la chain con mejor APY
+- Deposita en el protocolo (Aave) automaticamente
+
+### Withdraw (Retirar)
+
+Retira fondos de un protocolo de lending:
+
+<CodeGroup>
+```javascript JavaScript
+const intent = await pan.withdraw({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  chain: 'base' // requerido para withdraw
+});
+```
+
+```bash cURL
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "action": "withdraw",
+    "amount": 500,
+    "asset": "USDC",
+    "chain": "base"
+  }'
+```
+</CodeGroup>
+
+### Bridge
+
+Mueve fondos entre chains:
+
+<CodeGroup>
+```javascript JavaScript
+const intent = await pan.bridge({
+  walletId: 'pan_wallet_abc123',
+  amount: 500,
+  asset: 'USDC',
+  fromChain: 'ethereum',
+  toChain: 'arbitrum'
+});
+```
+
+```bash cURL
+curl -X POST https://api.pan.dev/v1/intents \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "pan_wallet_abc123",
+    "action": "bridge",
+    "amount": 500,
+    "asset": "USDC",
+    "fromChain": "ethereum",
+    "toChain": "arbitrum"
+  }'
+```
+</CodeGroup>
+
+## Parametros de Intent
+
+### Comunes a todos los intents
+
+| Parametro | Tipo | Requerido | Descripcion |
+|-----------|------|-----------|-------------|
+| `walletId` | string | Si | ID de la wallet Pan |
+| `action` | string | Si | `lend`, `withdraw`, o `bridge` |
+| `amount` | number | Si | Cantidad en unidades del token |
+| `asset` | string | No | Token a usar (default: `USDC`) |
+
+### Especificos por accion
+
+**Lend:**
+| Parametro | Tipo | Requerido | Descripcion |
+|-----------|------|-----------|-------------|
+| `chain` | string | No | Chain destino. Si no se especifica, Pan elige la mejor |
+
+**Withdraw:**
+| Parametro | Tipo | Requerido | Descripcion |
+|-----------|------|-----------|-------------|
+| `chain` | string | Si | Chain de donde retirar |
+
+**Bridge:**
+| Parametro | Tipo | Requerido | Descripcion |
+|-----------|------|-----------|-------------|
+| `fromChain` | string | Si | Chain origen |
+| `toChain` | string | Si | Chain destino |
+
+## Ciclo de Vida de un Intent
+
+Los intents pasan por estados bien definidos:
+
+```
+┌─────────┐     ┌──────────┐     ┌───────────┐     ┌───────────┐
+│ pending │ --> │ planning │ --> │ executing │ --> │ completed │
+└─────────┘     └──────────┘     └───────────┘     └───────────┘
+                                       │
+                                       │ (si hay error)
+                                       ▼
+                                 ┌──────────┐
+                                 │  failed  │
+                                 └──────────┘
+```
+
+<Steps>
+  <Step title="Pending">
+    El intent ha sido creado y registrado en el sistema. Este estado es muy breve.
+
+    ```json
+    { "status": "pending" }
+    ```
+  </Step>
+
+  <Step title="Planning">
+    Pan esta analizando el wallet, evaluando protocolos, y generando el plan de ejecucion optimo.
+
+    ```json
+    {
+      "status": "planning",
+      "executionPlan": null  // Aun no disponible
+    }
+    ```
+
+    **Que ocurre internamente:**
+    - Consulta balances del wallet en todas las chains
+    - Obtiene APYs actuales de protocolos
+    - Calcula rutas de bridge optimas
+    - Estima costos de gas
+    - Genera plan de ejecucion
+  </Step>
+
+  <Step title="Executing">
+    Pan esta ejecutando las transacciones en blockchain.
+
+    ```json
+    {
+      "status": "executing",
+      "executionPlan": {
+        "strategy": "single-bridge",
+        "steps": [
+          { "type": "bridge", "status": "completed" },
+          { "type": "deposit", "status": "executing" }
+        ]
+      },
+      "results": {
+        "completedSteps": 1,
+        "transactions": [
+          { "type": "bridge", "txHash": "0x123..." }
+        ]
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Completed">
+    Todas las operaciones completaron exitosamente.
+
+    ```json
+    {
+      "status": "completed",
+      "results": {
+        "completedSteps": 2,
+        "totalGasUsed": "350000",
+        "totalGasCostUsd": 2.30,
+        "finalAmount": "998.50",
+        "apy": 8.52
+      },
+      "completedAt": "2024-01-15T10:45:30Z"
+    }
+    ```
+  </Step>
+
+  <Step title="Failed">
+    Algo salio mal durante la ejecucion.
+
+    ```json
+    {
+      "status": "failed",
+      "error": {
+        "code": "INSUFFICIENT_FUNDS",
+        "message": "Wallet does not have sufficient USDC",
+        "details": {
+          "required": "1000 USDC",
+          "available": "750 USDC"
+        }
+      },
+      "results": {
+        "completedSteps": 1,
+        "failedStep": 2
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Monitorear Intents
+
+La ejecucion de intents es asincrona. Debes hacer polling para seguir el progreso:
+
+<CodeGroup>
+```javascript JavaScript
+async function esperarIntent(intentId) {
+  const maxIntentos = 60; // 5 minutos
+  let intentos = 0;
+
+  while (intentos < maxIntentos) {
+    const intent = await pan.getIntent(intentId);
+
+    console.log(`Estado: ${intent.status}`);
+
+    // Mostrar progreso si esta ejecutando
+    if (intent.status === 'executing' && intent.executionPlan) {
+      const pasos = intent.executionPlan.steps;
+      const completados = intent.results?.completedSteps || 0;
+      console.log(`  Progreso: ${completados}/${pasos.length}`);
+
+      // Mostrar transacciones completadas
+      intent.results?.transactions?.forEach(tx => {
+        console.log(`  ${tx.type}: ${tx.txHash}`);
+      });
+    }
+
+    // Verificar estados finales
+    if (intent.status === 'completed') {
+      console.log('Intent completado!');
+      console.log(`Gas total: $${intent.results.totalGasCostUsd}`);
+      return intent;
+    }
+
+    if (intent.status === 'failed') {
+      console.error('Intent fallido:', intent.error.message);
+      throw new Error(intent.error.message);
+    }
+
+    // Esperar 5 segundos
+    await new Promise(r => setTimeout(r, 5000));
+    intentos++;
+  }
+
+  throw new Error('Timeout esperando intent');
+}
+```
+
+```python Python
+import time
+
+def esperar_intent(intent_id):
+    max_intentos = 60
+    intentos = 0
+
+    while intentos < max_intentos:
+        response = requests.get(
+            f'{BASE_URL}/intents/{intent_id}',
+            headers={'Authorization': f'Bearer {API_KEY}'}
+        )
+        intent = response.json()
+
+        print(f"Estado: {intent['status']}")
+
+        if intent['status'] == 'completed':
+            print('Intent completado!')
+            return intent
+
+        if intent['status'] == 'failed':
+            raise Exception(intent['error']['message'])
+
+        time.sleep(5)
+        intentos += 1
+
+    raise Exception('Timeout')
+```
+</CodeGroup>
+
+<Tip>
+  **Intervalo de polling recomendado**: 5-10 segundos. Mas frecuente desperdicia recursos, menos frecuente reduce responsividad.
+</Tip>
+
+## Estrategias de Ejecucion
+
+Pan determina automaticamente la mejor estrategia basandose en el estado del wallet:
+
+### no-bridge
+
+Los fondos ya estan en la chain destino. Deposito directo.
+
+```json
+{
+  "strategy": "no-bridge",
+  "steps": [
+    { "type": "deposit", "chain": "base", "amount": "1000" }
+  ]
+}
+```
+
+### single-bridge
+
+Los fondos estan en una sola chain diferente. Un bridge + deposito.
+
+```json
+{
+  "strategy": "single-bridge",
+  "steps": [
+    { "type": "bridge", "from": "arbitrum", "to": "base", "amount": "1000" },
+    { "type": "deposit", "chain": "base", "amount": "1000" }
+  ]
+}
+```
+
+### multi-bridge
+
+Los fondos estan distribuidos en multiples chains. Varios bridges + deposito.
+
+```json
+{
+  "strategy": "multi-bridge",
+  "steps": [
+    { "type": "bridge", "from": "ethereum", "to": "base", "amount": "200" },
+    { "type": "bridge", "from": "arbitrum", "to": "base", "amount": "500" },
+    { "type": "deposit", "chain": "base", "amount": "1000" }
+  ]
+}
+```
+
+### insufficient
+
+No hay fondos suficientes. El intent falla en planning.
+
+```json
+{
+  "status": "failed",
+  "error": {
+    "code": "INSUFFICIENT_FUNDS",
+    "message": "Not enough USDC across all chains",
+    "details": {
+      "required": "1000",
+      "available": "750"
+    }
+  }
+}
+```
+
+## Manejo de Errores
+
+### Errores Comunes
+
+| Codigo | Descripcion | Solucion |
+|--------|-------------|----------|
+| `INSUFFICIENT_FUNDS` | No hay fondos suficientes | Depositar mas fondos |
+| `WALLET_NOT_FOUND` | Wallet no existe | Verificar walletId |
+| `INVALID_CHAIN` | Chain no soportada | Usar chain valida |
+| `BRIDGE_FAILED` | Fallo en bridge | Reintentar intent |
+| `DEPOSIT_FAILED` | Fallo en deposito | Verificar protocolo |
+
+### Estructura de Error
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Mensaje legible para humanos",
+    "details": {
+      "campo1": "valor1",
+      "campo2": "valor2"
+    }
+  }
+}
+```
+
+### Reintentar Intents Fallidos
+
+```javascript
+async function ejecutarConReintento(params, maxReintentos = 3) {
+  let ultimoError;
+
+  for (let i = 0; i < maxReintentos; i++) {
+    try {
+      const intent = await pan.lend(params);
+      return await esperarIntent(intent.id);
+    } catch (error) {
+      ultimoError = error;
+
+      // Solo reintentar errores transitorios
+      const reintentables = ['BRIDGE_FAILED', 'NETWORK_ERROR', 'TIMEOUT'];
+      if (!reintentables.includes(error.code)) {
+        throw error;
+      }
+
+      console.log(`Reintento ${i + 1}/${maxReintentos}...`);
+      await new Promise(r => setTimeout(r, 5000 * (i + 1))); // Backoff
+    }
+  }
+
+  throw ultimoError;
+}
+```
+
+## Ejemplos Avanzados
+
+### Lending con Verificacion de APY
+
+```javascript
+async function lendSiApy(walletId, amount, minApy) {
+  // Obtener yields actuales
+  const { yields, bestYield } = await pan.yields.getAll();
+
+  // Verificar APY minimo
+  if (bestYield.apy < minApy) {
+    console.log(`APY actual (${bestYield.apy}%) menor a minimo (${minApy}%)`);
+    return null;
+  }
+
+  // Crear intent
+  const intent = await pan.lend({
+    walletId,
+    amount,
+    asset: 'USDC'
+  });
+
+  console.log(`Lending a ${bestYield.chain} con ${bestYield.apy}% APY`);
+  return intent;
+}
+
+// Uso: solo prestar si APY > 7%
+await lendSiApy('wallet_123', 1000, 7.0);
+```
+
+### Rebalanceo Automatico
+
+```javascript
+async function rebalancearAMejorYield(walletId) {
+  // 1. Obtener balances actuales
+  const { balances } = await pan.wallet.getBalances(walletId);
+
+  // 2. Calcular total disponible
+  let totalUsdc = 0;
+  for (const [chain, tokens] of Object.entries(balances)) {
+    const usdc = tokens.find(t => t.symbol === 'USDC');
+    if (usdc) totalUsdc += parseFloat(usdc.balanceFormatted);
+  }
+
+  if (totalUsdc === 0) {
+    console.log('No hay USDC disponible');
+    return;
+  }
+
+  // 3. Obtener mejor yield
+  const { bestYield } = await pan.yields.getAll();
+  console.log(`Mejor yield: ${bestYield.apy}% en ${bestYield.chain}`);
+
+  // 4. Crear intent de lending
+  // Pan automaticamente consolidara fondos de todas las chains
+  const intent = await pan.lend({
+    walletId,
+    amount: totalUsdc,
+    asset: 'USDC'
+  });
+
+  return intent;
+}
+```
+
+### Notificaciones de Progreso
+
+```javascript
+async function ejecutarConNotificaciones(walletId, amount, onProgress) {
+  const intent = await pan.lend({ walletId, amount, asset: 'USDC' });
+
+  let ultimoEstado = null;
+  let ultimosPasos = 0;
+
+  while (true) {
+    const actual = await pan.getIntent(intent.id);
+
+    // Notificar cambio de estado
+    if (actual.status !== ultimoEstado) {
+      onProgress({
+        type: 'status',
+        status: actual.status,
+        message: getStatusMessage(actual.status)
+      });
+      ultimoEstado = actual.status;
+    }
+
+    // Notificar pasos completados
+    const pasosCompletados = actual.results?.completedSteps || 0;
+    if (pasosCompletados > ultimosPasos) {
+      const paso = actual.executionPlan.steps[pasosCompletados - 1];
+      onProgress({
+        type: 'step',
+        step: paso,
+        completed: pasosCompletados,
+        total: actual.executionPlan.steps.length
+      });
+      ultimosPasos = pasosCompletados;
+    }
+
+    // Estado final
+    if (actual.status === 'completed' || actual.status === 'failed') {
+      return actual;
+    }
+
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
+
+function getStatusMessage(status) {
+  return {
+    pending: 'Iniciando...',
+    planning: 'Calculando mejor estrategia...',
+    executing: 'Ejecutando transacciones...',
+    completed: 'Completado!',
+    failed: 'Error en ejecucion'
+  }[status];
+}
+
+// Uso
+await ejecutarConNotificaciones('wallet_123', 1000, (progress) => {
+  console.log(progress);
+  // Enviar a UI, webhook, etc.
+});
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Planes de Ejecucion"
+    icon="route"
+    href="/guias/conceptos/planes-ejecucion"
+  >
+    Profundiza en como Pan optimiza estrategias
+  </Card>
+  <Card
+    title="Ejecutar Intents"
+    icon="play"
+    href="/guias/ejecutar-intents"
+  >
+    Guia practica paso a paso
+  </Card>
+  <Card
+    title="Monitorear Estado"
+    icon="chart-line"
+    href="/guias/monitorear-estado"
+  >
+    Mejores practicas de monitoreo
+  </Card>
+  <Card
+    title="Manejo de Errores"
+    icon="exclamation-triangle"
+    href="/guias/mejores-practicas/manejo-errores"
+  >
+    Como manejar errores correctamente
+  </Card>
+</CardGroup>

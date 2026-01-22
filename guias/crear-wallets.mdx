@@ -1,0 +1,509 @@
+---
+title: "Crear Wallets"
+description: "Guia practica para crear y gestionar wallets de usuarios"
+---
+
+Esta guia te muestra como crear wallets para tus usuarios, consultar wallets existentes, y manejar el ciclo de vida completo de una wallet en Pan.
+
+## Crear una Wallet Basica
+
+El caso mas simple: crear una wallet para un usuario nuevo.
+
+<CodeGroup>
+```javascript JavaScript
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+
+// Crear wallet
+const wallet = await pan.wallet.create({
+  userId: 'usuario_123'
+});
+
+console.log('Wallet ID:', wallet.id);
+console.log('Address:', wallet.address);
+```
+
+```python Python
+import requests
+import os
+
+response = requests.post(
+    'https://api.pan.dev/v1/wallets',
+    headers={
+        'Authorization': f"Bearer {os.getenv('PAN_API_KEY')}",
+        'Content-Type': 'application/json'
+    },
+    json={
+        'userId': 'usuario_123'
+    }
+)
+
+wallet = response.json()
+print(f"Wallet ID: {wallet['id']}")
+print(f"Address: {wallet['address']}")
+```
+
+```bash cURL
+curl -X POST https://api.pan.dev/v1/wallets \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "usuario_123"}'
+```
+</CodeGroup>
+
+## Crear Wallet con Metadata
+
+Almacena informacion adicional sobre el usuario:
+
+<CodeGroup>
+```javascript JavaScript
+const wallet = await pan.wallet.create({
+  userId: 'usuario_maria_456',
+  email: 'maria@ejemplo.com',
+  metadata: {
+    nombre: 'Maria Garcia',
+    plan: 'premium',
+    kyc_status: 'verified',
+    referral_code: 'ABC123',
+    preferences: {
+      currency: 'USD',
+      language: 'es'
+    }
+  }
+});
+```
+
+```python Python
+wallet = requests.post(
+    'https://api.pan.dev/v1/wallets',
+    headers=headers,
+    json={
+        'userId': 'usuario_maria_456',
+        'email': 'maria@ejemplo.com',
+        'metadata': {
+            'nombre': 'Maria Garcia',
+            'plan': 'premium',
+            'kyc_status': 'verified'
+        }
+    }
+).json()
+```
+</CodeGroup>
+
+<Note>
+  El `email` se usa para notificaciones opcionales. El `metadata` puede contener cualquier JSON serializable.
+</Note>
+
+## Patron: Crear Wallet al Registrarse
+
+Integra la creacion de wallet en tu flujo de registro:
+
+```javascript
+// En tu handler de registro
+async function onUserSignup(userData) {
+  // 1. Crear usuario en tu base de datos
+  const user = await db.users.create({
+    email: userData.email,
+    name: userData.name
+  });
+
+  // 2. Crear wallet de Pan
+  const wallet = await pan.wallet.create({
+    userId: user.id,
+    email: user.email,
+    metadata: {
+      name: user.name,
+      signupDate: new Date().toISOString(),
+      source: userData.referralSource
+    }
+  });
+
+  // 3. Guardar referencia a wallet
+  await db.users.update(user.id, {
+    panWalletId: wallet.id,
+    panWalletAddress: wallet.address
+  });
+
+  // 4. Retornar usuario con wallet
+  return {
+    ...user,
+    wallet: {
+      id: wallet.id,
+      address: wallet.address
+    }
+  };
+}
+```
+
+## Patron: Obtener o Crear Wallet
+
+Para usuarios que pueden o no tener wallet:
+
+```javascript
+async function getOrCreateWallet(userId, email) {
+  try {
+    // Intentar obtener wallet existente
+    const wallet = await pan.wallet.get(userId);
+    console.log('Wallet existente encontrada');
+    return wallet;
+  } catch (error) {
+    if (error.code === 'WALLET_NOT_FOUND') {
+      // Crear nueva wallet
+      console.log('Creando nueva wallet...');
+      return await pan.wallet.create({ userId, email });
+    }
+    throw error;
+  }
+}
+
+// Uso
+const wallet = await getOrCreateWallet('user_123', 'user@email.com');
+```
+
+## Obtener Wallet Existente
+
+Recuperar una wallet por userId:
+
+<CodeGroup>
+```javascript JavaScript
+// Por userId (recomendado)
+const wallet = await pan.wallet.get('usuario_123');
+
+console.log('ID:', wallet.id);
+console.log('Address:', wallet.address);
+console.log('Metadata:', wallet.metadata);
+```
+
+```python Python
+response = requests.get(
+    'https://api.pan.dev/v1/wallets/usuario_123',
+    headers=headers
+)
+wallet = response.json()
+```
+
+```bash cURL
+curl -X GET "https://api.pan.dev/v1/wallets/usuario_123" \
+  -H "Authorization: Bearer $PAN_API_KEY"
+```
+</CodeGroup>
+
+<Tip>
+  El endpoint usa `userId` como parametro, no `walletId`. Esto facilita el mapeo entre tus usuarios y sus wallets.
+</Tip>
+
+## Manejo de Errores Comunes
+
+### Usuario ya tiene wallet
+
+```javascript
+try {
+  const wallet = await pan.wallet.create({ userId: 'usuario_123' });
+} catch (error) {
+  if (error.code === 'WALLET_ALREADY_EXISTS') {
+    // Obtener wallet existente
+    const existingWallet = await pan.wallet.get('usuario_123');
+    console.log('Usuario ya tiene wallet:', existingWallet.id);
+  }
+}
+```
+
+### Limite de wallets excedido
+
+```javascript
+try {
+  const wallet = await pan.wallet.create({ userId: 'nuevo_usuario' });
+} catch (error) {
+  if (error.code === 'WALLET_LIMIT_EXCEEDED') {
+    console.log('Has alcanzado el limite de wallets de tu plan');
+    console.log('Actualiza a Pro o Enterprise para mas wallets');
+    // Mostrar UI de upgrade
+  }
+}
+```
+
+### Wallet no encontrada
+
+```javascript
+try {
+  const wallet = await pan.wallet.get('usuario_inexistente');
+} catch (error) {
+  if (error.code === 'WALLET_NOT_FOUND') {
+    console.log('Usuario no tiene wallet registrada');
+    // Crear wallet o mostrar UI
+  }
+}
+```
+
+## Ejemplo Completo: Servicio de Wallets
+
+```javascript
+// services/wallet-service.js
+
+class WalletService {
+  constructor(panClient, db) {
+    this.pan = panClient;
+    this.db = db;
+  }
+
+  /**
+   * Crea una wallet para un usuario nuevo
+   */
+  async createForUser(user) {
+    // Verificar que no tenga wallet
+    const existing = await this.db.users.findOne({
+      where: { id: user.id, panWalletId: { not: null } }
+    });
+
+    if (existing?.panWalletId) {
+      throw new Error('Usuario ya tiene wallet');
+    }
+
+    // Crear wallet en Pan
+    const wallet = await this.pan.wallet.create({
+      userId: user.id,
+      email: user.email,
+      metadata: {
+        name: user.name,
+        createdAt: new Date().toISOString()
+      }
+    });
+
+    // Guardar en base de datos
+    await this.db.users.update({
+      where: { id: user.id },
+      data: {
+        panWalletId: wallet.id,
+        panWalletAddress: wallet.address
+      }
+    });
+
+    return wallet;
+  }
+
+  /**
+   * Obtiene la wallet de un usuario
+   */
+  async getForUser(userId) {
+    const user = await this.db.users.findUnique({
+      where: { id: userId },
+      select: { panWalletId: true }
+    });
+
+    if (!user?.panWalletId) {
+      return null;
+    }
+
+    return await this.pan.wallet.get(userId);
+  }
+
+  /**
+   * Obtiene balances formateados para mostrar en UI
+   */
+  async getBalancesForDisplay(userId) {
+    const user = await this.db.users.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user?.panWalletId) {
+      return { hasWallet: false, balances: [] };
+    }
+
+    const { balances, totalUsdValue } = await this.pan.wallet.getBalances(
+      user.panWalletId
+    );
+
+    // Formatear para UI
+    const formatted = [];
+    for (const [chain, tokens] of Object.entries(balances)) {
+      for (const token of tokens) {
+        if (parseFloat(token.balanceFormatted) > 0) {
+          formatted.push({
+            chain: this.formatChainName(chain),
+            chainId: chain,
+            token: token.symbol,
+            amount: token.balanceFormatted,
+            usd: token.usdValue.toFixed(2)
+          });
+        }
+      }
+    }
+
+    return {
+      hasWallet: true,
+      address: user.panWalletAddress,
+      balances: formatted,
+      totalUsd: totalUsdValue.toFixed(2)
+    };
+  }
+
+  formatChainName(chain) {
+    const names = {
+      'ethereum': 'Ethereum',
+      'ethereum-sepolia': 'Ethereum Testnet',
+      'arbitrum': 'Arbitrum',
+      'arbitrum-sepolia': 'Arbitrum Testnet',
+      'base': 'Base',
+      'base-sepolia': 'Base Testnet'
+    };
+    return names[chain] || chain;
+  }
+}
+
+export default WalletService;
+```
+
+## Uso con React
+
+```jsx
+// hooks/useWallet.js
+import { useState, useEffect } from 'react';
+import { usePan } from './usePan';
+
+export function useWallet(userId) {
+  const pan = usePan();
+  const [wallet, setWallet] = useState(null);
+  const [balances, setBalances] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function loadWallet() {
+      try {
+        setLoading(true);
+
+        // Obtener wallet
+        const w = await pan.wallet.get(userId);
+        setWallet(w);
+
+        // Obtener balances
+        const b = await pan.wallet.getBalances(w.id);
+        setBalances(b);
+      } catch (err) {
+        if (err.code !== 'WALLET_NOT_FOUND') {
+          setError(err);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (userId) {
+      loadWallet();
+    }
+  }, [userId, pan]);
+
+  const createWallet = async () => {
+    try {
+      setLoading(true);
+      const w = await pan.wallet.create({ userId });
+      setWallet(w);
+      return w;
+    } catch (err) {
+      setError(err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshBalances = async () => {
+    if (!wallet) return;
+    const b = await pan.wallet.getBalances(wallet.id);
+    setBalances(b);
+  };
+
+  return {
+    wallet,
+    balances,
+    loading,
+    error,
+    createWallet,
+    refreshBalances,
+    hasWallet: !!wallet
+  };
+}
+```
+
+```jsx
+// components/WalletCard.jsx
+function WalletCard({ userId }) {
+  const { wallet, balances, loading, createWallet, hasWallet } = useWallet(userId);
+
+  if (loading) {
+    return <div>Cargando wallet...</div>;
+  }
+
+  if (!hasWallet) {
+    return (
+      <div className="wallet-card empty">
+        <h3>No tienes una wallet</h3>
+        <button onClick={createWallet}>
+          Crear Wallet
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="wallet-card">
+      <h3>Tu Wallet</h3>
+      <p className="address">{wallet.address}</p>
+
+      <h4>Balances</h4>
+      {balances?.totalUsdValue > 0 ? (
+        <>
+          {Object.entries(balances.balances).map(([chain, tokens]) =>
+            tokens.map(token => (
+              <div key={`${chain}-${token.symbol}`} className="balance-row">
+                <span>{chain}</span>
+                <span>{token.balanceFormatted} {token.symbol}</span>
+                <span>${token.usdValue.toFixed(2)}</span>
+              </div>
+            ))
+          )}
+          <div className="total">
+            Total: ${balances.totalUsdValue.toFixed(2)}
+          </div>
+        </>
+      ) : (
+        <p>Sin balances. Deposita fondos a tu direccion.</p>
+      )}
+    </div>
+  );
+}
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Consultar Balances"
+    icon="wallet"
+    href="/guias/consultar-balances"
+  >
+    Como consultar y mostrar balances
+  </Card>
+  <Card
+    title="Ejecutar Intents"
+    icon="target"
+    href="/guias/ejecutar-intents"
+  >
+    Realizar operaciones DeFi
+  </Card>
+  <Card
+    title="API de Wallets"
+    icon="terminal"
+    href="/api/wallets/crear-wallet"
+  >
+    Referencia completa del endpoint
+  </Card>
+  <Card
+    title="Seguridad"
+    icon="shield"
+    href="/guias/mejores-practicas/seguridad"
+  >
+    Mejores practicas de seguridad
+  </Card>
+</CardGroup>

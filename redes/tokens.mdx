@@ -1,0 +1,260 @@
+---
+title: "Tokens Soportados"
+description: "Tokens compatibles con Pan API"
+---
+
+## Token Principal: USDC
+
+<Card title="USDC (USD Coin)" icon="dollar-sign">
+  USDC es el token principal soportado por Pan. Es una stablecoin respaldada 1:1
+  por dolares estadounidenses, emitida por Circle.
+</Card>
+
+### Por que USDC?
+
+1. **Estabilidad** - Mantiene paridad 1:1 con USD
+2. **Liquidez** - Alto volumen en todas las chains soportadas
+3. **Regulacion** - Circle esta regulada en EE.UU.
+4. **Transparencia** - Auditorias mensuales de reservas
+5. **Adopcion** - Ampliamente aceptada en DeFi
+
+## Direcciones de USDC
+
+### Mainnet
+
+| Chain | Direccion | Decimales |
+|-------|-----------|-----------|
+| Ethereum | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` | 6 |
+| Arbitrum | `0xaf88d065e77c8cC2239327C5EDb3A432268e5831` | 6 |
+| Base | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 |
+
+### Testnet (USDC de prueba)
+
+| Chain | Direccion | Decimales |
+|-------|-----------|-----------|
+| Ethereum Sepolia | `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238` | 6 |
+| Arbitrum Sepolia | `0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d` | 6 |
+| Base Sepolia | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | 6 |
+
+<Warning>
+Los tokens de testnet no tienen valor real. Puedes obtenerlos de faucets
+o usando el endpoint demo de Pan.
+</Warning>
+
+## Formatos de Balance
+
+### Respuesta de API
+
+```json
+{
+  "balances": {
+    "arbitrum": [
+      {
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "decimals": 6,
+        "balance": "1000000000",
+        "balanceFormatted": "1000.00",
+        "valueUsd": 1000.00,
+        "protocol": null
+      },
+      {
+        "symbol": "aUSDC",
+        "name": "Aave USDC",
+        "address": "0x724dc807b04555b71ed48a6896b6F41593b8C637",
+        "decimals": 6,
+        "balance": "500000000",
+        "balanceFormatted": "500.00",
+        "valueUsd": 500.00,
+        "protocol": "aave",
+        "apy": 0.0523
+      }
+    ]
+  }
+}
+```
+
+### Campos Importantes
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `symbol` | string | Simbolo del token (USDC, aUSDC) |
+| `balance` | string | Balance en unidades minimas (wei) |
+| `balanceFormatted` | string | Balance legible |
+| `decimals` | number | Decimales del token (6 para USDC) |
+| `valueUsd` | number | Valor en USD |
+| `protocol` | string? | Protocolo si esta depositado |
+| `apy` | number? | APY actual si genera rendimiento |
+
+## Conversion de Unidades
+
+### USDC tiene 6 decimales
+
+```typescript
+// 1 USDC = 1,000,000 unidades minimas
+
+// Convertir de unidades minimas a USDC
+function formatUSDC(balance: string): string {
+  return (parseInt(balance) / 1e6).toFixed(2);
+}
+
+// Convertir de USDC a unidades minimas
+function parseUSDC(amount: number): string {
+  return Math.floor(amount * 1e6).toString();
+}
+
+// Ejemplos
+formatUSDC("1000000");     // "1.00"
+formatUSDC("1500000000");  // "1500.00"
+
+parseUSDC(100);            // "100000000"
+parseUSDC(0.5);            // "500000"
+```
+
+### Usando ethers.js
+
+```typescript
+import { formatUnits, parseUnits } from 'ethers';
+
+// Formatear
+const formatted = formatUnits("1000000000", 6); // "1000.0"
+
+// Parsear
+const parsed = parseUnits("1000", 6); // BigNumber "1000000000"
+```
+
+## Tokens Derivados (aTokens)
+
+Cuando depositas USDC en Aave, recibes aUSDC (Aave USDC).
+
+### Caracteristicas de aTokens
+
+| Propiedad | Descripcion |
+|-----------|-------------|
+| Nombre | aUSDC (Aave USDC) |
+| Tipo | Token con rebase |
+| Valor | 1 aUSDC = 1 USDC (siempre) |
+| Rendimiento | Balance aumenta automaticamente |
+
+### Como Funciona el Rendimiento
+
+```
+Dia 1: Depositas 1000 USDC → Recibes 1000 aUSDC
+Dia 30: Tu balance de aUSDC ahora es ~1004.3 aUSDC
+        (asumiendo ~5% APY)
+```
+
+El balance de aUSDC aumenta cada bloque. No necesitas hacer nada
+para reclamar el rendimiento.
+
+### Direcciones de aUSDC
+
+| Chain | Direccion aUSDC (Aave V3) |
+|-------|---------------------------|
+| Ethereum | `0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c` |
+| Arbitrum | `0x724dc807b04555b71ed48a6896b6F41593b8C637` |
+| Base | `0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB` |
+
+## Otros Tokens
+
+<Info>
+Actualmente Pan solo soporta USDC. Estamos evaluando agregar soporte para:
+- **USDT** - Otra stablecoin popular
+- **DAI** - Stablecoin descentralizada
+- **ETH** - Para staking
+</Info>
+
+### Tokens NO Soportados
+
+Pan no soporta y no planea soportar:
+- Tokens meme (DOGE, SHIB, etc.)
+- Tokens de alto riesgo
+- Tokens sin liquidez
+- Tokens en chains no soportadas
+
+## Obtener USDC
+
+### Para Produccion
+
+1. **Exchanges centralizados** - Binance, Coinbase, Kraken
+2. **Rampas fiat** - MoonPay, Transak
+3. **DEXs** - Uniswap, 1inch
+4. **P2P** - LocalBitcoins, Paxful
+
+### Para Desarrollo (Testnet)
+
+```bash
+# Usar el endpoint demo de Pan
+curl -X POST https://api-staging.pan.dev/v1/demo/fund \
+  -H "Authorization: Bearer $PAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletId": "wallet_123",
+    "amount": 10000,
+    "chain": "arbitrum-sepolia"
+  }'
+```
+
+O usa faucets oficiales:
+- [Circle Faucet](https://faucet.circle.com)
+- [Alchemy Faucet](https://sepoliafaucet.com)
+
+## Validacion de Tokens
+
+### Verificar Token Valido
+
+```typescript
+const VALID_TOKENS = {
+  mainnet: {
+    ethereum: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    arbitrum: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    base: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+  },
+  testnet: {
+    'ethereum-sepolia': '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+    'arbitrum-sepolia': '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
+    'base-sepolia': '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
+  }
+};
+
+function isValidUSDC(address: string, chain: string, isTestnet: boolean): boolean {
+  const network = isTestnet ? VALID_TOKENS.testnet : VALID_TOKENS.mainnet;
+  return network[chain]?.toLowerCase() === address.toLowerCase();
+}
+```
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Por que solo USDC y no otras stablecoins?">
+    Empezamos con USDC porque:
+    - Es la stablecoin mas transparente y regulada
+    - Tiene liquidez profunda en Aave en todas las chains
+    - Circle (emisor) opera legalmente en EE.UU.
+    - Auditorias mensuales de reservas
+
+    Agregaremos mas tokens basado en demanda.
+  </Accordion>
+
+  <Accordion title="Puedo depositar ETH directamente?">
+    Actualmente no. Pan se enfoca en stablecoins para rendimiento.
+    Si tienes ETH, puedes:
+    1. Intercambiarlo por USDC en un DEX
+    2. Depositar el USDC en Pan
+
+    Soporte para ETH staking esta en el roadmap.
+  </Accordion>
+
+  <Accordion title="Que pasa si envio un token no soportado?">
+    Los tokens no soportados se quedaran en tu wallet pero Pan no los
+    procesara. Podras recuperarlos usando tu clave privada en otra
+    aplicacion wallet.
+  </Accordion>
+
+  <Accordion title="Los balances de aUSDC se actualizan en tiempo real?">
+    Si, el balance de aUSDC aumenta cada bloque (aproximadamente cada
+    12 segundos en Ethereum, mas rapido en L2s). Cuando consultas
+    balances, siempre obtienes el valor actual.
+  </Accordion>
+</AccordionGroup>

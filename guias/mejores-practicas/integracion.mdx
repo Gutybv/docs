@@ -1,0 +1,314 @@
+---
+title: "Integracion"
+description: "Patrones de integracion con Pan API"
+---
+
+## Arquitectura Recomendada
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       Tu Frontend                            │
+│                    (React, Vue, etc.)                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       Tu Backend                             │
+│              (Node.js, Python, etc.)                         │
+│                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐                   │
+│  │  Pan Service    │  │  Tu Base de     │                   │
+│  │  (SDK)          │  │  Datos          │                   │
+│  └─────────────────┘  └─────────────────┘                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        Pan API                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Servicio de Pan
+
+```typescript
+// services/pan.service.ts
+import { Pan, Wallet, Balances, Intent } from '@pan/sdk';
+import { prisma } from './db';
+
+class PanService {
+  private pan: Pan;
+
+  constructor() {
+    this.pan = new Pan({
+      apiKey: process.env.PAN_API_KEY!
+    });
+  }
+
+  async createWalletForUser(userId: string, email?: string): Promise<Wallet> {
+    // Verificar si ya existe
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (user?.panWalletId) {
+      return await this.pan.wallet.get(userId);
+    }
+
+    // Crear wallet
+    const wallet = await this.pan.wallet.create({
+      userId,
+      email,
+      metadata: { createdAt: new Date().toISOString() }
+    });
+
+    // Guardar referencia
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        panWalletId: wallet.id,
+        panWalletAddress: wallet.address
+      }
+    });
+
+    return wallet;
+  }
+
+  async getBalances(userId: string): Promise<Balances> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user?.panWalletId) {
+      throw new Error('Usuario no tiene wallet');
+    }
+
+    return await this.pan.wallet.getBalances(user.panWalletId);
+  }
+
+  async lend(userId: string, amount: number): Promise<Intent> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user?.panWalletId) {
+      throw new Error('Usuario no tiene wallet');
+    }
+
+    const intent = await this.pan.lend({
+      walletId: user.panWalletId,
+      amount,
+      asset: 'USDC'
+    });
+
+    // Guardar intent en tu DB
+    await prisma.transaction.create({
+      data: {
+        userId,
+        panIntentId: intent.id,
+        type: 'LEND',
+        amount,
+        status: intent.status
+      }
+    });
+
+    return intent;
+  }
+}
+
+export const panService = new PanService();
+```
+
+## API Routes (Next.js)
+
+```typescript
+// app/api/wallet/route.ts
+import { NextResponse } from 'next/server';
+import { panService } from '@/services/pan.service';
+import { getServerSession } from 'next-auth';
+
+export async function POST(request: Request) {
+  const session = await getServerSession();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const wallet = await panService.createWalletForUser(
+      session.user.id,
+      session.user.email
+    );
+
+    return NextResponse.json(wallet);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(request: Request) {
+  const session = await getServerSession();
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const balances = await panService.getBalances(session.user.id);
+    return NextResponse.json(balances);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
+  }
+}
+```
+
+## Webhooks (Proximo)
+
+```typescript
+// app/api/webhooks/pan/route.ts
+export async function POST(request: Request) {
+  const body = await request.json();
+
+  // Verificar firma
+  const signature = request.headers.get('x-pan-signature');
+  if (!verifySignature(body, signature)) {
+    return new Response('Invalid signature', { status: 401 });
+  }
+
+  switch (body.event) {
+    case 'intent.completed':
+      await handleIntentCompleted(body.data);
+      break;
+
+    case 'intent.failed':
+      await handleIntentFailed(body.data);
+      break;
+  }
+
+  return new Response('OK');
+}
+
+async function handleIntentCompleted(data: any) {
+  await prisma.transaction.update({
+    where: { panIntentId: data.intentId },
+    data: {
+      status: 'COMPLETED',
+      completedAt: new Date()
+    }
+  });
+
+  // Notificar usuario
+  await sendNotification(data.userId, 'Tu deposito fue exitoso!');
+}
+```
+
+## React Hooks
+
+```typescript
+// hooks/usePanWallet.ts
+import { useState, useEffect, useCallback } from 'react';
+
+export function usePanWallet() {
+  const [wallet, setWallet] = useState(null);
+  const [balances, setBalances] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchWallet = useCallback(async () => {
+    const response = await fetch('/api/wallet');
+    if (response.ok) {
+      const data = await response.json();
+      setWallet(data.wallet);
+      setBalances(data.balances);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchWallet();
+  }, [fetchWallet]);
+
+  const createWallet = async () => {
+    const response = await fetch('/api/wallet', { method: 'POST' });
+    if (response.ok) {
+      await fetchWallet();
+    }
+  };
+
+  const refreshBalances = async () => {
+    const response = await fetch('/api/wallet');
+    if (response.ok) {
+      const data = await response.json();
+      setBalances(data.balances);
+    }
+  };
+
+  return {
+    wallet,
+    balances,
+    loading,
+    createWallet,
+    refreshBalances,
+    hasWallet: !!wallet
+  };
+}
+```
+
+## Modelo de Datos
+
+```prisma
+// prisma/schema.prisma
+model User {
+  id               String        @id @default(cuid())
+  email            String        @unique
+  panWalletId      String?
+  panWalletAddress String?
+  transactions     Transaction[]
+  createdAt        DateTime      @default(now())
+}
+
+model Transaction {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  panIntentId  String   @unique
+  type         String   // LEND, WITHDRAW, BRIDGE
+  amount       Float
+  asset        String   @default("USDC")
+  status       String   // PENDING, EXECUTING, COMPLETED, FAILED
+  txHashes     String[] // Transaction hashes
+  gasCostUsd   Float?
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+}
+```
+
+## Flujo de Usuario
+
+```typescript
+// Flujo completo de lending
+async function lendingFlow(userId: string, amount: number) {
+  // 1. Verificar wallet existe
+  let wallet = await panService.getWallet(userId);
+
+  if (!wallet) {
+    wallet = await panService.createWallet(userId);
+  }
+
+  // 2. Verificar fondos
+  const balances = await panService.getBalances(userId);
+  const usdcTotal = calculateTotal(balances, 'USDC');
+
+  if (usdcTotal < amount) {
+    throw new Error(`Fondos insuficientes: ${usdcTotal} < ${amount}`);
+  }
+
+  // 3. Crear intent
+  const intent = await panService.lend(userId, amount);
+
+  // 4. Monitorear (o usar webhooks)
+  return await panService.waitForIntent(intent.id);
+}
+```

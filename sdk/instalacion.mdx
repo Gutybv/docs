@@ -1,0 +1,155 @@
+---
+title: "Instalacion"
+description: "Como instalar y configurar el SDK de Pan"
+---
+
+El SDK oficial de Pan para JavaScript/TypeScript simplifica la integracion con Pan API.
+
+## Instalacion
+
+<CodeGroup>
+```bash npm
+npm install @pan/sdk
+```
+
+```bash yarn
+yarn add @pan/sdk
+```
+
+```bash pnpm
+pnpm add @pan/sdk
+```
+
+```bash bun
+bun add @pan/sdk
+```
+</CodeGroup>
+
+## Configuracion Basica
+
+```typescript
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY
+});
+```
+
+## Opciones de Configuracion
+
+```typescript
+const pan = new Pan({
+  // Requerido
+  apiKey: 'pan_sk_...',
+
+  // Opcionales
+  baseURL: 'https://api.pan.dev/v1',  // URL base de la API
+  timeout: 30000,                       // Timeout en ms (default: 30000)
+  debug: false,                         // Modo debug (default: false)
+  retries: 3,                          // Reintentos automaticos (default: 3)
+});
+```
+
+| Opcion | Tipo | Default | Descripcion |
+|--------|------|---------|-------------|
+| `apiKey` | string | - | Tu API key de Pan |
+| `baseURL` | string | `https://api.pan.dev/v1` | URL base |
+| `timeout` | number | 30000 | Timeout en milisegundos |
+| `debug` | boolean | false | Activa logs de debug |
+| `retries` | number | 3 | Reintentos en errores |
+
+## Verificar Instalacion
+
+```typescript
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+
+// Verificar conexion
+try {
+  const yields = await pan.yields.getAll();
+  console.log('Conexion exitosa!');
+  console.log('Mejor APY:', yields.bestYield.apy);
+} catch (error) {
+  console.error('Error de conexion:', error.message);
+}
+```
+
+## Variables de Entorno
+
+Recomendamos usar variables de entorno para la API key:
+
+```env
+# .env
+PAN_API_KEY=pan_sk_tu_api_key_aqui
+```
+
+```typescript
+// Cargar con dotenv o similar
+import 'dotenv/config';
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY
+});
+```
+
+<Warning>
+  Nunca commitees tu API key. Agrega `.env` a tu `.gitignore`.
+</Warning>
+
+## TypeScript
+
+El SDK incluye tipos TypeScript completos:
+
+```typescript
+import { Pan, Wallet, Intent, Balances, Yields } from '@pan/sdk';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY! });
+
+// Los tipos se infieren automaticamente
+const wallet: Wallet = await pan.wallet.create({
+  userId: 'user_123'
+});
+
+const balances: Balances = await pan.wallet.getBalances(wallet.id);
+
+const intent: Intent = await pan.lend({
+  walletId: wallet.id,
+  amount: 1000,
+  asset: 'USDC'
+});
+```
+
+## Proximos Pasos
+
+<CardGroup cols={2}>
+  <Card
+    title="Cliente"
+    icon="plug"
+    href="/sdk/cliente"
+  >
+    Configuracion avanzada del cliente
+  </Card>
+  <Card
+    title="Wallets"
+    icon="wallet"
+    href="/sdk/wallets"
+  >
+    Operaciones con wallets
+  </Card>
+  <Card
+    title="Intents"
+    icon="target"
+    href="/sdk/intents"
+  >
+    Crear y monitorear intents
+  </Card>
+  <Card
+    title="Errores"
+    icon="exclamation-triangle"
+    href="/sdk/errores"
+  >
+    Manejo de errores
+  </Card>
+</CardGroup>

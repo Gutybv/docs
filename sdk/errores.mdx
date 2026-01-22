@@ -1,0 +1,224 @@
+---
+title: "Errores (SDK)"
+description: "Manejo de errores con el SDK"
+---
+
+## Clase PanError
+
+El SDK lanza `PanError` para todos los errores de API:
+
+```typescript
+import { Pan, PanError } from '@pan/sdk';
+
+try {
+  const wallet = await pan.wallet.get('usuario_inexistente');
+} catch (error) {
+  if (error instanceof PanError) {
+    console.log('Codigo:', error.code);        // WALLET_NOT_FOUND
+    console.log('Mensaje:', error.message);    // Wallet not found
+    console.log('Status:', error.statusCode);  // 404
+    console.log('Detalles:', error.details);   // { userId: '...' }
+  }
+}
+```
+
+## Estructura
+
+```typescript
+class PanError extends Error {
+  code: string;           // Codigo de error
+  statusCode: number;     // Codigo HTTP
+  message: string;        // Mensaje legible
+  details?: object;       // Informacion adicional
+}
+```
+
+## Codigos Comunes
+
+| Codigo | Status | Descripcion |
+|--------|--------|-------------|
+| `UNAUTHORIZED` | 401 | API key invalida |
+| `FORBIDDEN` | 403 | Sin permisos |
+| `WALLET_NOT_FOUND` | 404 | Wallet no existe |
+| `INTENT_NOT_FOUND` | 404 | Intent no existe |
+| `WALLET_ALREADY_EXISTS` | 409 | Usuario ya tiene wallet |
+| `WALLET_LIMIT_EXCEEDED` | 403 | Limite de wallets |
+| `INSUFFICIENT_FUNDS` | 400 | Fondos insuficientes |
+| `RATE_LIMITED` | 429 | Demasiadas requests |
+| `INVALID_REQUEST` | 400 | Request invalido |
+
+## Manejo por Tipo
+
+```typescript
+import { Pan, PanError } from '@pan/sdk';
+
+async function createWalletSafe(userId: string) {
+  try {
+    return await pan.wallet.create({ userId });
+  } catch (error) {
+    if (!(error instanceof PanError)) throw error;
+
+    switch (error.code) {
+      case 'WALLET_ALREADY_EXISTS':
+        // Usuario ya tiene wallet, obtenerla
+        return await pan.wallet.get(userId);
+
+      case 'WALLET_LIMIT_EXCEEDED':
+        throw new Error('Limite de wallets alcanzado. Actualiza tu plan.');
+
+      case 'UNAUTHORIZED':
+        throw new Error('Error de autenticacion. Verifica tu API key.');
+
+      case 'RATE_LIMITED':
+        // Esperar y reintentar
+        await sleep(error.details?.retryAfter || 60);
+        return createWalletSafe(userId);
+
+      default:
+        throw error;
+    }
+  }
+}
+```
+
+## Reintentos Automaticos
+
+El SDK reintenta automaticamente algunos errores:
+
+```typescript
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!,
+  retries: 3  // Reintentar hasta 3 veces
+});
+
+// Errores que se reintentan:
+// - RATE_LIMITED (429)
+// - INTERNAL_ERROR (500)
+// - SERVICE_UNAVAILABLE (503)
+// - Errores de red
+```
+
+### Desactivar Reintentos
+
+```typescript
+const pan = new Pan({
+  apiKey: process.env.PAN_API_KEY!,
+  retries: 0
+});
+```
+
+## Patron Try-Catch
+
+```typescript
+async function ejecutarConManejo(fn: () => Promise<any>) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof PanError) {
+      // Error de API conocido
+      handlePanError(error);
+    } else if (error.name === 'TypeError' || error.name === 'NetworkError') {
+      // Error de red
+      throw new Error('Error de conexion. Verifica tu internet.');
+    } else {
+      // Error desconocido
+      console.error('Error inesperado:', error);
+      throw error;
+    }
+  }
+}
+
+function handlePanError(error: PanError) {
+  switch (error.statusCode) {
+    case 400:
+      throw new Error(`Solicitud invalida: ${error.message}`);
+    case 401:
+      throw new Error('Sesion expirada. Inicia sesion nuevamente.');
+    case 403:
+      throw new Error('No tienes permisos para esta accion.');
+    case 404:
+      throw new Error('Recurso no encontrado.');
+    case 429:
+      throw new Error('Demasiadas solicitudes. Intenta en un momento.');
+    case 500:
+    case 503:
+      throw new Error('Error del servidor. Intenta mas tarde.');
+    default:
+      throw error;
+  }
+}
+```
+
+## Hook de React para Errores
+
+```typescript
+import { useState, useCallback } from 'react';
+import { PanError } from '@pan/sdk';
+
+interface ErrorState {
+  message: string;
+  code?: string;
+  retry?: () => void;
+}
+
+export function usePanError() {
+  const [error, setError] = useState<ErrorState | null>(null);
+
+  const handleError = useCallback((err: unknown, retryFn?: () => void) => {
+    if (err instanceof PanError) {
+      const messages: Record<string, string> = {
+        UNAUTHORIZED: 'Error de autenticacion',
+        WALLET_NOT_FOUND: 'Wallet no encontrada',
+        INSUFFICIENT_FUNDS: 'Fondos insuficientes',
+        RATE_LIMITED: 'Demasiadas solicitudes',
+        WALLET_LIMIT_EXCEEDED: 'Limite de wallets alcanzado'
+      };
+
+      setError({
+        message: messages[err.code] || err.message,
+        code: err.code,
+        retry: err.code === 'RATE_LIMITED' ? retryFn : undefined
+      });
+    } else {
+      setError({
+        message: 'Error inesperado. Intenta de nuevo.'
+      });
+    }
+  }, []);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  return { error, handleError, clearError };
+}
+```
+
+```tsx
+// Uso
+function WalletCreate() {
+  const pan = usePan();
+  const { error, handleError, clearError } = usePanError();
+
+  const create = async () => {
+    try {
+      clearError();
+      await pan.wallet.create({ userId: 'user_123' });
+    } catch (err) {
+      handleError(err, create);
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={create}>Crear Wallet</button>
+      {error && (
+        <div className="error">
+          <p>{error.message}</p>
+          {error.retry && (
+            <button onClick={error.retry}>Reintentar</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+```

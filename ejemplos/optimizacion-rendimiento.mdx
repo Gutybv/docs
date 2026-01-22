@@ -1,0 +1,730 @@
+---
+title: "Optimizacion de Rendimiento"
+description: "Estrategias avanzadas para maximizar yields"
+---
+
+## Caso de Uso
+
+Una plataforma de inversion quiere:
+- Mostrar las mejores oportunidades de rendimiento
+- Optimizar automaticamente donde se depositan los fondos
+- Rebalancear cuando hay mejores opciones
+
+## Comparador de Yields
+
+### Obtener y Analizar Yields
+
+```typescript
+import { Pan } from '@pan/sdk';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY! });
+
+interface YieldOpportunity {
+  chain: string;
+  protocol: string;
+  asset: string;
+  apy: number;
+  tvl: number;
+  riskScore: 'low' | 'medium' | 'high';
+}
+
+async function getYieldOpportunities(): Promise<YieldOpportunity[]> {
+  const yields = await pan.yields.getAll();
+
+  return yields.yields.map(y => ({
+    chain: y.chain,
+    protocol: y.protocol,
+    asset: y.asset,
+    apy: y.apy,
+    tvl: y.tvl,
+    riskScore: calculateRiskScore(y)
+  }));
+}
+
+function calculateRiskScore(yield_: any): 'low' | 'medium' | 'high' {
+  // Aave en mainnet = bajo riesgo
+  if (yield_.protocol === 'aave' && yield_.chain === 'ethereum') {
+    return 'low';
+  }
+
+  // Aave en L2s = riesgo medio
+  if (yield_.protocol === 'aave') {
+    return 'medium';
+  }
+
+  // Otros = alto riesgo
+  return 'high';
+}
+```
+
+### Dashboard de Oportunidades
+
+```typescript
+interface YieldDashboard {
+  bestOverall: YieldOpportunity;
+  bestByRisk: {
+    low: YieldOpportunity | null;
+    medium: YieldOpportunity | null;
+    high: YieldOpportunity | null;
+  };
+  averageAPY: number;
+  recommendations: string[];
+}
+
+async function generateDashboard(asset: string = 'USDC'): Promise<YieldDashboard> {
+  const opportunities = await getYieldOpportunities();
+  const filtered = opportunities.filter(o => o.asset === asset);
+
+  // Ordenar por APY
+  const sorted = filtered.sort((a, b) => b.apy - a.apy);
+
+  // Mejor por nivel de riesgo
+  const bestByRisk = {
+    low: sorted.find(o => o.riskScore === 'low') || null,
+    medium: sorted.find(o => o.riskScore === 'medium') || null,
+    high: sorted.find(o => o.riskScore === 'high') || null
+  };
+
+  // Promedio
+  const averageAPY = filtered.reduce((sum, o) => sum + o.apy, 0) / filtered.length;
+
+  // Generar recomendaciones
+  const recommendations: string[] = [];
+
+  if (bestByRisk.medium && bestByRisk.low) {
+    const diff = bestByRisk.medium.apy - bestByRisk.low.apy;
+    if (diff > 0.01) { // > 1% diferencia
+      recommendations.push(
+        `Considera ${bestByRisk.medium.chain} para +${(diff * 100).toFixed(2)}% APY con riesgo moderado`
+      );
+    }
+  }
+
+  return {
+    bestOverall: sorted[0],
+    bestByRisk,
+    averageAPY,
+    recommendations
+  };
+}
+
+// Uso
+const dashboard = await generateDashboard('USDC');
+console.log(`Mejor APY: ${(dashboard.bestOverall.apy * 100).toFixed(2)}% en ${dashboard.bestOverall.chain}`);
+```
+
+## Optimizador Automatico
+
+### Estrategia de Rebalanceo
+
+```typescript
+interface Position {
+  chain: string;
+  protocol: string;
+  amount: number;
+  currentAPY: number;
+}
+
+interface RebalanceRecommendation {
+  from: Position;
+  to: YieldOpportunity;
+  amount: number;
+  apyIncrease: number;
+  estimatedGasCost: number;
+  netBenefit: number;
+  breakEvenDays: number;
+}
+
+class YieldOptimizer {
+  private pan: Pan;
+  private minAPYDifference = 0.005; // 0.5%
+  private minAmountUSD = 100;
+
+  constructor(apiKey: string) {
+    this.pan = new Pan({ apiKey });
+  }
+
+  async analyzePositions(walletId: string): Promise<Position[]> {
+    const balances = await this.pan.wallet.getBalances(walletId);
+    const positions: Position[] = [];
+
+    for (const [chain, tokens] of Object.entries(balances.balances)) {
+      for (const token of tokens) {
+        if (token.protocol) { // Posicion en protocolo
+          positions.push({
+            chain,
+            protocol: token.protocol,
+            amount: parseFloat(token.balanceFormatted),
+            currentAPY: token.apy || 0
+          });
+        }
+      }
+    }
+
+    return positions;
+  }
+
+  async findRebalanceOpportunities(
+    walletId: string
+  ): Promise<RebalanceRecommendation[]> {
+    const [positions, yields] = await Promise.all([
+      this.analyzePositions(walletId),
+      this.pan.yields.getAll()
+    ]);
+
+    const recommendations: RebalanceRecommendation[] = [];
+
+    for (const position of positions) {
+      if (position.amount < this.minAmountUSD) continue;
+
+      // Encontrar mejor yield para el mismo asset
+      const betterYields = yields.yields.filter(y =>
+        y.apy > position.currentAPY + this.minAPYDifference &&
+        y.asset === 'USDC' // Asumiendo USDC
+      );
+
+      for (const better of betterYields) {
+        const apyIncrease = better.apy - position.currentAPY;
+        const yearlyBenefit = position.amount * apyIncrease;
+
+        // Estimar costo de gas (simplificado)
+        const estimatedGasCost = this.estimateGasCost(position.chain, better.chain);
+
+        // Beneficio neto a 1 ano
+        const netBenefit = yearlyBenefit - estimatedGasCost;
+
+        // Dias para recuperar costo de gas
+        const dailyBenefit = yearlyBenefit / 365;
+        const breakEvenDays = estimatedGasCost / dailyBenefit;
+
+        if (netBenefit > 0 && breakEvenDays < 90) { // Rentable en < 90 dias
+          recommendations.push({
+            from: position,
+            to: better as YieldOpportunity,
+            amount: position.amount,
+            apyIncrease,
+            estimatedGasCost,
+            netBenefit,
+            breakEvenDays
+          });
+        }
+      }
+    }
+
+    // Ordenar por beneficio neto
+    return recommendations.sort((a, b) => b.netBenefit - a.netBenefit);
+  }
+
+  private estimateGasCost(fromChain: string, toChain: string): number {
+    // Costos estimados en USD
+    const gasCosts: Record<string, Record<string, number>> = {
+      ethereum: { ethereum: 20, arbitrum: 25, base: 25 },
+      arbitrum: { ethereum: 15, arbitrum: 0.50, base: 5 },
+      base: { ethereum: 15, arbitrum: 5, base: 0.30 }
+    };
+
+    return gasCosts[fromChain]?.[toChain] || 30;
+  }
+
+  async executeRebalance(
+    walletId: string,
+    recommendation: RebalanceRecommendation
+  ): Promise<void> {
+    console.log(`Rebalanceando ${recommendation.amount} USDC`);
+    console.log(`De: ${recommendation.from.chain} (${(recommendation.from.currentAPY * 100).toFixed(2)}%)`);
+    console.log(`A: ${recommendation.to.chain} (${(recommendation.to.apy * 100).toFixed(2)}%)`);
+
+    // 1. Retirar de posicion actual
+    const withdrawIntent = await this.pan.withdraw({
+      walletId,
+      amount: recommendation.amount,
+      asset: 'USDC'
+    });
+
+    await this.waitForIntent(withdrawIntent.id);
+
+    // 2. Depositar en nueva posicion (Pan automaticamente hace bridge si es necesario)
+    const depositIntent = await this.pan.lend({
+      walletId,
+      amount: recommendation.amount,
+      asset: 'USDC',
+      preferredChain: recommendation.to.chain
+    });
+
+    await this.waitForIntent(depositIntent.id);
+
+    console.log('Rebalanceo completado!');
+  }
+
+  private async waitForIntent(intentId: string): Promise<void> {
+    while (true) {
+      const intent = await this.pan.getIntent(intentId);
+
+      if (intent.status === 'completed') return;
+      if (intent.status === 'failed') {
+        throw new Error(`Intent fallido: ${intent.error?.message}`);
+      }
+
+      await new Promise(r => setTimeout(r, 5000));
+    }
+  }
+}
+
+// Uso
+const optimizer = new YieldOptimizer(process.env.PAN_API_KEY!);
+
+const recommendations = await optimizer.findRebalanceOpportunities('wallet_123');
+
+if (recommendations.length > 0) {
+  const best = recommendations[0];
+  console.log(`Recomendacion: Mover ${best.amount} USDC`);
+  console.log(`Aumento de APY: +${(best.apyIncrease * 100).toFixed(2)}%`);
+  console.log(`Beneficio anual: $${best.netBenefit.toFixed(2)}`);
+  console.log(`Recuperas gas en: ${best.breakEvenDays.toFixed(0)} dias`);
+
+  // Ejecutar si el usuario acepta
+  // await optimizer.executeRebalance('wallet_123', best);
+}
+```
+
+## Monitoreo de APY
+
+### Alertas de Cambios
+
+```typescript
+interface APYAlert {
+  asset: string;
+  chain: string;
+  previousAPY: number;
+  currentAPY: number;
+  changePercent: number;
+}
+
+class APYMonitor {
+  private pan: Pan;
+  private previousYields: Map<string, number> = new Map();
+  private alertThreshold = 0.005; // 0.5% cambio
+
+  constructor(apiKey: string) {
+    this.pan = new Pan({ apiKey });
+  }
+
+  private getKey(chain: string, asset: string): string {
+    return `${chain}:${asset}`;
+  }
+
+  async checkForChanges(): Promise<APYAlert[]> {
+    const yields = await this.pan.yields.getAll();
+    const alerts: APYAlert[] = [];
+
+    for (const y of yields.yields) {
+      const key = this.getKey(y.chain, y.asset);
+      const previous = this.previousYields.get(key);
+
+      if (previous !== undefined) {
+        const change = y.apy - previous;
+        const changePercent = change / previous;
+
+        if (Math.abs(changePercent) > this.alertThreshold) {
+          alerts.push({
+            asset: y.asset,
+            chain: y.chain,
+            previousAPY: previous,
+            currentAPY: y.apy,
+            changePercent
+          });
+        }
+      }
+
+      this.previousYields.set(key, y.apy);
+    }
+
+    return alerts;
+  }
+
+  async startMonitoring(
+    intervalMinutes: number,
+    onAlert: (alerts: APYAlert[]) => void
+  ): Promise<void> {
+    // Carga inicial
+    await this.checkForChanges();
+
+    setInterval(async () => {
+      const alerts = await this.checkForChanges();
+
+      if (alerts.length > 0) {
+        onAlert(alerts);
+      }
+    }, intervalMinutes * 60 * 1000);
+  }
+}
+
+// Uso
+const monitor = new APYMonitor(process.env.PAN_API_KEY!);
+
+monitor.startMonitoring(5, (alerts) => {
+  for (const alert of alerts) {
+    const direction = alert.changePercent > 0 ? '📈' : '📉';
+    console.log(
+      `${direction} ${alert.asset} en ${alert.chain}: ` +
+      `${(alert.previousAPY * 100).toFixed(2)}% → ${(alert.currentAPY * 100).toFixed(2)}%`
+    );
+  }
+});
+```
+
+## Estrategia de DCA con Yield
+
+### Dollar Cost Averaging + Optimizacion
+
+```typescript
+interface DCAConfig {
+  walletId: string;
+  amount: number;        // Monto por periodo
+  intervalDays: number;  // Frecuencia
+  asset: string;
+  autoOptimize: boolean; // Elegir mejor chain automaticamente
+}
+
+class DCAStrategy {
+  private pan: Pan;
+
+  constructor(apiKey: string) {
+    this.pan = new Pan({ apiKey });
+  }
+
+  async executeDCA(config: DCAConfig): Promise<void> {
+    console.log(`Ejecutando DCA: ${config.amount} ${config.asset}`);
+
+    let preferredChain: string | undefined;
+
+    if (config.autoOptimize) {
+      // Encontrar mejor APY
+      const yields = await this.pan.yields.getAll();
+      const best = yields.yields
+        .filter(y => y.asset === config.asset)
+        .sort((a, b) => b.apy - a.apy)[0];
+
+      if (best) {
+        preferredChain = best.chain;
+        console.log(`Optimizando: depositando en ${best.chain} (${(best.apy * 100).toFixed(2)}% APY)`);
+      }
+    }
+
+    const intent = await this.pan.lend({
+      walletId: config.walletId,
+      amount: config.amount,
+      asset: config.asset,
+      preferredChain
+    });
+
+    console.log(`Intent creado: ${intent.id}`);
+  }
+
+  setupSchedule(config: DCAConfig): void {
+    // Primera ejecucion
+    this.executeDCA(config);
+
+    // Programar siguientes
+    setInterval(
+      () => this.executeDCA(config),
+      config.intervalDays * 24 * 60 * 60 * 1000
+    );
+  }
+}
+
+// Uso: $100 cada semana, optimizando automaticamente
+const dca = new DCAStrategy(process.env.PAN_API_KEY!);
+
+dca.setupSchedule({
+  walletId: 'wallet_123',
+  amount: 100,
+  intervalDays: 7,
+  asset: 'USDC',
+  autoOptimize: true
+});
+```
+
+## Calculadora de Rendimientos
+
+### Proyecciones Personalizadas
+
+```typescript
+interface YieldProjection {
+  months: number;
+  principal: number;
+  interest: number;
+  total: number;
+  effectiveAPY: number;
+}
+
+async function calculateProjections(
+  principal: number,
+  months: number,
+  compoundingFrequency: 'daily' | 'weekly' | 'monthly' = 'daily'
+): Promise<YieldProjection[]> {
+  const pan = new Pan({ apiKey: process.env.PAN_API_KEY! });
+  const yields = await pan.yields.getAll();
+
+  // Usar mejor APY disponible
+  const bestYield = yields.yields
+    .filter(y => y.asset === 'USDC')
+    .sort((a, b) => b.apy - a.apy)[0];
+
+  const apy = bestYield?.apy || 0.05; // Default 5%
+
+  const projections: YieldProjection[] = [];
+
+  // Convertir APY a tasa por periodo de composicion
+  let periodsPerYear: number;
+  switch (compoundingFrequency) {
+    case 'daily': periodsPerYear = 365; break;
+    case 'weekly': periodsPerYear = 52; break;
+    case 'monthly': periodsPerYear = 12; break;
+  }
+
+  const ratePerPeriod = apy / periodsPerYear;
+
+  for (let m = 1; m <= months; m++) {
+    const totalPeriods = m * (periodsPerYear / 12);
+    const total = principal * Math.pow(1 + ratePerPeriod, totalPeriods);
+    const interest = total - principal;
+
+    // APY efectivo considerando composicion
+    const effectiveAPY = Math.pow(total / principal, 12 / m) - 1;
+
+    projections.push({
+      months: m,
+      principal,
+      interest,
+      total,
+      effectiveAPY
+    });
+  }
+
+  return projections;
+}
+
+// Uso
+const projections = await calculateProjections(10000, 12);
+
+console.log('Proyeccion de rendimientos para $10,000:');
+console.log('=========================================');
+
+for (const p of projections) {
+  console.log(
+    `Mes ${p.months.toString().padStart(2)}: ` +
+    `$${p.total.toFixed(2)} (+$${p.interest.toFixed(2)} intereses)`
+  );
+}
+```
+
+## UI de Optimizacion
+
+### Componente React
+
+```tsx
+import React, { useState, useEffect } from 'react';
+
+interface YieldData {
+  chain: string;
+  protocol: string;
+  apy: number;
+  tvl: number;
+}
+
+function YieldOptimizer({ walletId }: { walletId: string }) {
+  const [yields, setYields] = useState<YieldData[]>([]);
+  const [currentPosition, setCurrentPosition] = useState<{
+    chain: string;
+    apy: number;
+    amount: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [optimizing, setOptimizing] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, [walletId]);
+
+  async function loadData() {
+    setLoading(true);
+
+    const [yieldsRes, balancesRes] = await Promise.all([
+      fetch('/api/yields'),
+      fetch(`/api/wallets/${walletId}/balances`)
+    ]);
+
+    const yieldsData = await yieldsRes.json();
+    const balancesData = await balancesRes.json();
+
+    setYields(yieldsData.yields);
+
+    // Encontrar posicion actual
+    for (const [chain, tokens] of Object.entries(balancesData.balances)) {
+      const deposited = tokens.find((t: any) => t.protocol);
+      if (deposited) {
+        setCurrentPosition({
+          chain,
+          apy: deposited.apy || 0,
+          amount: parseFloat(deposited.balanceFormatted)
+        });
+        break;
+      }
+    }
+
+    setLoading(false);
+  }
+
+  async function optimize(targetChain: string) {
+    if (!currentPosition) return;
+
+    setOptimizing(true);
+
+    try {
+      // Retirar
+      await fetch('/api/intents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'withdraw',
+          walletId,
+          amount: currentPosition.amount,
+          asset: 'USDC'
+        })
+      });
+
+      // Esperar y depositar en nuevo chain
+      await fetch('/api/intents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'lend',
+          walletId,
+          amount: currentPosition.amount,
+          asset: 'USDC',
+          preferredChain: targetChain
+        })
+      });
+
+      await loadData();
+    } catch (error) {
+      console.error('Error optimizando:', error);
+    }
+
+    setOptimizing(false);
+  }
+
+  if (loading) {
+    return <div className="animate-pulse">Cargando...</div>;
+  }
+
+  const sortedYields = [...yields].sort((a, b) => b.apy - a.apy);
+  const bestYield = sortedYields[0];
+
+  return (
+    <div className="space-y-6">
+      {/* Posicion Actual */}
+      {currentPosition && (
+        <div className="bg-white rounded-lg p-6 shadow">
+          <h3 className="text-lg font-semibold mb-4">Tu Posicion Actual</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Chain</p>
+              <p className="text-xl font-bold capitalize">{currentPosition.chain}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">APY</p>
+              <p className="text-xl font-bold text-green-600">
+                {(currentPosition.apy * 100).toFixed(2)}%
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Monto</p>
+              <p className="text-xl font-bold">
+                ${currentPosition.amount.toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Oportunidad de Optimizacion */}
+      {currentPosition && bestYield && bestYield.apy > currentPosition.apy && (
+        <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 text-white">
+          <h3 className="text-lg font-semibold mb-2">💡 Oportunidad de Optimizacion</h3>
+          <p className="mb-4">
+            Puedes ganar <strong>+{((bestYield.apy - currentPosition.apy) * 100).toFixed(2)}%</strong> mas
+            moviendo a {bestYield.chain}
+          </p>
+          <button
+            onClick={() => optimize(bestYield.chain)}
+            disabled={optimizing}
+            className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50"
+          >
+            {optimizing ? 'Optimizando...' : 'Optimizar Ahora'}
+          </button>
+        </div>
+      )}
+
+      {/* Tabla de Yields */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chain</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Protocolo</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">APY</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">TVL</th>
+              <th className="px-6 py-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {sortedYields.map((y, i) => (
+              <tr key={`${y.chain}-${y.protocol}`} className={i === 0 ? 'bg-green-50' : ''}>
+                <td className="px-6 py-4 capitalize">{y.chain}</td>
+                <td className="px-6 py-4 capitalize">{y.protocol}</td>
+                <td className="px-6 py-4 font-semibold text-green-600">
+                  {(y.apy * 100).toFixed(2)}%
+                </td>
+                <td className="px-6 py-4">
+                  ${(y.tvl / 1e6).toFixed(1)}M
+                </td>
+                <td className="px-6 py-4">
+                  {currentPosition?.chain !== y.chain && (
+                    <button
+                      onClick={() => optimize(y.chain)}
+                      disabled={optimizing}
+                      className="text-purple-600 hover:text-purple-800 font-medium"
+                    >
+                      Mover aqui
+                    </button>
+                  )}
+                  {currentPosition?.chain === y.chain && (
+                    <span className="text-green-600">✓ Actual</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export default YieldOptimizer;
+```
+
+## Resumen
+
+Con estas estrategias de optimizacion puedes:
+
+1. **Comparar yields** en tiempo real entre chains y protocolos
+2. **Rebalancear automaticamente** cuando hay mejores oportunidades
+3. **Monitorear cambios** de APY y recibir alertas
+4. **Implementar DCA** con optimizacion automatica
+5. **Proyectar ganancias** para tus usuarios
+6. **Mostrar UI interactiva** para optimizacion manual
+
+Todo aprovechando que Pan abstrae la complejidad de mover fondos entre chains y protocolos.
