@@ -107,8 +107,8 @@ const response = await fetch(
   }
 );
 
-const response = await response.json();
-console.log('Total USD:', response.totalValueUsd);
+const data = await response.json();
+console.log('Total USD:', data.totalValueUsd);
 ```
 
 ```typescript SDK

@@ -139,8 +139,8 @@ async function getDistributedBalance(walletId: string): Promise<{
   const byChain: ChainBalance[] = [];
   let total = 0;
 
-  for (const [chain, tokens] of Object.entries(balances.balances)) {
-    const usdc = tokens.filter(t => t.symbol === 'USDC');
+  for (const chainData of balances.chains) {
+    const usdc = chainData.tokens.filter(t => t.asset === 'USDC');
 
     let chainAmount = 0;
     let inProtocol = 0;
@@ -158,7 +158,7 @@ async function getDistributedBalance(walletId: string): Promise<{
     }
 
     if (chainAmount > 0) {
-      byChain.push({ chain, amount: chainAmount, inProtocol, available });
+      byChain.push({ chain: chainData.chain, amount: chainAmount, inProtocol, available });
       total += chainAmount;
     }
   }
@@ -253,8 +253,8 @@ async function bridgeFunds(params: BridgeParams): Promise<{
 }> {
   // Verificar balance en chain origen
   const balances = await pan.wallet.getBalances(params.walletId);
-  const sourceTokens = balances.balances[params.fromChain] || [];
-  const sourceBalance = sourceTokens.find(t => t.symbol === params.asset);
+  const sourceChain = balances.chains.find(c => c.chain === params.fromChain);
+  const sourceBalance = sourceChain?.tokens.find(t => t.asset === params.asset);
 
   if (!sourceBalance || parseFloat(sourceBalance.balanceFormatted) < params.amount) {
     throw new Error(`Fondos insuficientes en ${params.fromChain}`);
@@ -317,7 +317,7 @@ async function smartDeposit(
   const yields = await pan.yields.getAll();
 
   // Filtrar por USDC y ordenar por APY
-  const usdcYields = yields.yields
+  const usdcYields = yields.rates
     .filter(y => y.asset === 'USDC')
     .sort((a, b) => b.apy - a.apy);
 
@@ -415,15 +415,15 @@ function MultiChainDashboard({ walletId }: MultiChainDashboardProps) {
     let total = 0;
     let apySum = 0;
 
-    for (const [chain, tokens] of Object.entries(balances.balances)) {
-      for (const token of tokens as any[]) {
-        if (token.symbol === 'USDC' && token.protocol) {
+    for (const chainData of balancesData.chains) {
+      for (const token of chainData.tokens as any[]) {
+        if (token.asset === 'USDC' && token.protocol) {
           const amount = parseFloat(token.balanceFormatted);
           const apy = token.apy || 0;
 
           pos.push({
-            chain,
-            chainLogo: chainLogos[chain] || '⬡',
+            chain: chainData.chain,
+            chainLogo: chainLogos[chainData.chain] || '⬡',
             protocol: token.protocol,
             amount,
             apy,

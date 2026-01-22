@@ -31,7 +31,7 @@ interface YieldOpportunity {
 async function getYieldOpportunities(): Promise<YieldOpportunity[]> {
   const yields = await pan.yields.getAll();
 
-  return yields.yields.map(y => ({
+  return yields.rates.map(y => ({
     chain: y.chain,
     protocol: y.protocol,
     asset: y.asset,
@@ -148,11 +148,11 @@ class YieldOptimizer {
     const balances = await this.pan.wallet.getBalances(walletId);
     const positions: Position[] = [];
 
-    for (const [chain, tokens] of Object.entries(balances.balances)) {
-      for (const token of tokens) {
+    for (const chainData of balances.chains) {
+      for (const token of chainData.tokens) {
         if (token.protocol) { // Posicion en protocolo
           positions.push({
-            chain,
+            chain: chainData.chain,
             protocol: token.protocol,
             amount: parseFloat(token.balanceFormatted),
             currentAPY: token.apy || 0
@@ -178,7 +178,7 @@ class YieldOptimizer {
       if (position.amount < this.minAmountUSD) continue;
 
       // Encontrar mejor yield para el mismo asset
-      const betterYields = yields.yields.filter(y =>
+      const betterYields = yields.rates.filter(y =>
         y.apy > position.currentAPY + this.minAPYDifference &&
         y.asset === 'USDC' // Asumiendo USDC
       );
@@ -317,7 +317,7 @@ class APYMonitor {
     const yields = await this.pan.yields.getAll();
     const alerts: APYAlert[] = [];
 
-    for (const y of yields.yields) {
+    for (const y of yields.rates) {
       const key = this.getKey(y.chain, y.asset);
       const previous = this.previousYields.get(key);
 
@@ -401,7 +401,7 @@ class DCAStrategy {
     if (config.autoOptimize) {
       // Encontrar mejor APY
       const yields = await this.pan.yields.getAll();
-      const best = yields.yields
+      const best = yields.rates
         .filter(y => y.asset === config.asset)
         .sort((a, b) => b.apy - a.apy)[0];
 
@@ -467,11 +467,11 @@ async function calculateProjections(
   const yields = await pan.yields.getAll();
 
   // Usar mejor APY disponible
-  const bestYield = yields.yields
+  const bestRate = yields.rates
     .filter(y => y.asset === 'USDC')
     .sort((a, b) => b.apy - a.apy)[0];
 
-  const apy = bestYield?.apy || 0.05; // Default 5%
+  const apy = bestRate?.apy || 0.05; // Default 5%
 
   const projections: YieldProjection[] = [];
 
@@ -558,14 +558,14 @@ function YieldOptimizer({ walletId }: { walletId: string }) {
     const yieldsData = await yieldsRes.json();
     const balancesData = await balancesRes.json();
 
-    setYields(yieldsData.yields);
+    setYields(yieldsData.rates);
 
     // Encontrar posicion actual
-    for (const [chain, tokens] of Object.entries(balancesData.balances)) {
-      const deposited = tokens.find((t: any) => t.protocol);
+    for (const chainData of balancesData.chains) {
+      const deposited = chainData.tokens.find((t: any) => t.protocol);
       if (deposited) {
         setCurrentPosition({
-          chain,
+          chain: chainData.chain,
           apy: deposited.apy || 0,
           amount: parseFloat(deposited.balanceFormatted)
         });
@@ -620,7 +620,7 @@ function YieldOptimizer({ walletId }: { walletId: string }) {
   }
 
   const sortedYields = [...yields].sort((a, b) => b.apy - a.apy);
-  const bestYield = sortedYields[0];
+  const bestRate = sortedYields[0];
 
   return (
     <div className="space-y-6">
@@ -650,15 +650,15 @@ function YieldOptimizer({ walletId }: { walletId: string }) {
       )}
 
       {/* Oportunidad de Optimizacion */}
-      {currentPosition && bestYield && bestYield.apy > currentPosition.apy && (
+      {currentPosition && bestRate && bestRate.apy > currentPosition.apy && (
         <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg p-6 text-white">
           <h3 className="text-lg font-semibold mb-2">💡 Oportunidad de Optimizacion</h3>
           <p className="mb-4">
-            Puedes ganar <strong>+{((bestYield.apy - currentPosition.apy) * 100).toFixed(2)}%</strong> mas
-            moviendo a {bestYield.chain}
+            Puedes ganar <strong>+{((bestRate.apy - currentPosition.apy) * 100).toFixed(2)}%</strong> mas
+            moviendo a {bestRate.chain}
           </p>
           <button
-            onClick={() => optimize(bestYield.chain)}
+            onClick={() => optimize(bestRate.chain)}
             disabled={optimizing}
             className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50"
           >

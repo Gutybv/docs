@@ -64,7 +64,7 @@ class BalanceWatcher {
 
   async check(walletId: string, onChange: (b: Balances) => void) {
     const balances = await pan.wallet.getBalances(walletId);
-    const hash = JSON.stringify(balances.balances);
+    const hash = JSON.stringify(balances.chains);
 
     if (hash !== this.lastHash) {
       this.lastHash = hash;
@@ -178,8 +178,8 @@ preloadYields();
 ```typescript
 // Si solo necesitas un chain especifico
 function getChainBalance(balances: Balances, chain: string, asset: string) {
-  const tokens = balances.balances[chain] || [];
-  const token = tokens.find(t => t.symbol === asset);
+  const chainData = balances.chains.find(c => c.chain === chain);
+  const token = chainData?.tokens.find(t => t.asset === asset);
   return token ? parseFloat(token.balanceFormatted) : 0;
 }
 
@@ -187,8 +187,8 @@ function getChainBalance(balances: Balances, chain: string, asset: string) {
 async function tieneUSDC(walletId: string, minimo: number): Promise<boolean> {
   const balances = await pan.wallet.getBalances(walletId);
 
-  for (const tokens of Object.values(balances.balances)) {
-    const usdc = tokens.find(t => t.symbol === 'USDC');
+  for (const chainData of balances.chains) {
+    const usdc = chainData.tokens.find(t => t.asset === 'USDC');
     if (usdc && parseFloat(usdc.balanceFormatted) >= minimo) {
       return true;
     }

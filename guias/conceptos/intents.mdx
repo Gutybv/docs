@@ -566,11 +566,11 @@ async function ejecutarConReintento(params, maxReintentos = 3) {
 ```javascript
 async function lendSiApy(walletId, amount, minApy) {
   // Obtener yields actuales
-  const { yields, bestYield } = await pan.yields.getAll();
+  const { rates, best } = await pan.yields.getAll();
 
   // Verificar APY minimo
-  if (bestYield.apy < minApy) {
-    console.log(`APY actual (${bestYield.apy}%) menor a minimo (${minApy}%)`);
+  if (best.apy < minApy) {
+    console.log(`APY actual (${best.apy}%) menor a minimo (${minApy}%)`);
     return null;
   }
 
@@ -581,7 +581,7 @@ async function lendSiApy(walletId, amount, minApy) {
     asset: 'USDC'
   });
 
-  console.log(`Lending a ${bestYield.chain} con ${bestYield.apy}% APY`);
+  console.log(`Lending a ${best.chain} con ${best.apy}% APY`);
   return intent;
 }
 
@@ -594,12 +594,12 @@ await lendSiApy('wallet_123', 1000, 7.0);
 ```javascript
 async function rebalancearAMejorYield(walletId) {
   // 1. Obtener balances actuales
-  const { balances } = await pan.wallet.getBalances(walletId);
+  const balancesResponse = await pan.wallet.getBalances(walletId);
 
   // 2. Calcular total disponible
   let totalUsdc = 0;
-  for (const [chain, tokens] of Object.entries(balances)) {
-    const usdc = tokens.find(t => t.symbol === 'USDC');
+  for (const chainData of balancesResponse.chains) {
+    const usdc = chainData.tokens.find(t => t.asset === 'USDC');
     if (usdc) totalUsdc += parseFloat(usdc.balanceFormatted);
   }
 
@@ -609,8 +609,8 @@ async function rebalancearAMejorYield(walletId) {
   }
 
   // 3. Obtener mejor yield
-  const { bestYield } = await pan.yields.getAll();
-  console.log(`Mejor yield: ${bestYield.apy}% en ${bestYield.chain}`);
+  const { best } = await pan.yields.getAll();
+  console.log(`Mejor yield: ${best.apy}% en ${best.chain}`);
 
   // 4. Crear intent de lending
   // Pan automaticamente consolidara fondos de todas las chains

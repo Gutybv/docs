@@ -69,7 +69,7 @@ const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
 try {
   const yields = await pan.yields.getAll();
   console.log('Conexion exitosa!');
-  console.log('Mejor APY:', yields.bestYield.apy);
+  console.log('Mejor APY:', yields.best.apy);
 } catch (error) {
   console.error('Error de conexion:', error.message);
 }

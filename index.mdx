@@ -336,16 +336,16 @@ def ejemplo_completo():
     balances = response.json()
 
     print('Balances por chain:')
-    for chain, tokens in balances['balances'].items():
-        for token in tokens:
-            print(f"  {chain}: {token['balanceFormatted']} {token['symbol']}")
+    for chain_data in balances['chains']:
+        for token in chain_data['tokens']:
+            print(f"  {chain_data['chain']}: {token['balanceFormatted']} {token['asset']}")
 
     # 3. Obtener yields
     response = requests.get(f'{BASE_URL}/yields', headers=headers)
     yields = response.json()
 
     print('Mejores APYs:')
-    for y in yields['yields']:
+    for y in yields['rates']:
         print(f"  {y['chain']}: {y['apy']}% en {y['protocol']}")
 
     # 4. Crear intent
