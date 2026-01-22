@@ -10,7 +10,7 @@ description: "Tokens compatibles con Pan API"
   por dolares estadounidenses, emitida por Circle.
 </Card>
 
-### Por que USDC?
+### ¿Por qué USDC?
 
 1. **Estabilidad** - Mantiene paridad 1:1 con USD
 2. **Liquidez** - Alto volumen en todas las chains soportadas
@@ -232,7 +232,7 @@ function isValidUSDC(address: string, chain: string): boolean {
 ## FAQ
 
 <AccordionGroup>
-  <Accordion title="Por que solo USDC y no otras stablecoins?">
+  <Accordion title="¿Por qué solo USDC y no otras stablecoins?">
     Empezamos con USDC porque:
     - Es la stablecoin mas transparente y regulada
     - Tiene liquidez profunda en Aave en todas las chains
@@ -242,7 +242,7 @@ function isValidUSDC(address: string, chain: string): boolean {
     Agregaremos mas tokens basado en demanda.
   </Accordion>
 
-  <Accordion title="Puedo depositar ETH directamente?">
+  <Accordion title="¿Puedo depositar ETH directamente?">
     Actualmente no. Pan se enfoca en stablecoins para rendimiento.
     Si tienes ETH, puedes:
     1. Intercambiarlo por USDC en un DEX
@@ -251,13 +251,13 @@ function isValidUSDC(address: string, chain: string): boolean {
     Soporte para ETH staking esta en el roadmap.
   </Accordion>
 
-  <Accordion title="Que pasa si envio un token no soportado?">
+  <Accordion title="¿Qué pasa si envío un token no soportado?">
     Los tokens no soportados se quedaran en tu wallet pero Pan no los
     procesara. Podras recuperarlos usando tu clave privada en otra
     aplicacion wallet.
   </Accordion>
 
-  <Accordion title="Los balances de aUSDC se actualizan en tiempo real?">
+  <Accordion title="¿Los balances de aUSDC se actualizan en tiempo real?">
     Si, el balance de aUSDC aumenta cada bloque (aproximadamente cada
     12 segundos en Ethereum, mas rapido en L2s). Cuando consultas
     balances, siempre obtienes el valor actual.

@@ -263,7 +263,7 @@ Las siguientes chains estan en evaluacion para futuras versiones:
 ## FAQ
 
 <AccordionGroup>
-  <Accordion title="Por que solo 3 chains?">
+  <Accordion title="¿Por qué solo 3 chains?">
     Empezamos con las chains que ofrecen:
     - Mayor liquidez en USDC
     - Mejores rendimientos en Aave
@@ -273,7 +273,7 @@ Las siguientes chains estan en evaluacion para futuras versiones:
     Agregaremos mas chains basado en demanda de usuarios.
   </Accordion>
 
-  <Accordion title="Puedo elegir en que chain depositar?">
+  <Accordion title="¿Puedo elegir en qué chain depositar?">
     Si, puedes usar el parametro `preferredChain` en los intents.
     Sin embargo, Pan optimizara automaticamente si detecta una mejor opcion
     considerando:
@@ -282,7 +282,7 @@ Las siguientes chains estan en evaluacion para futuras versiones:
     - Liquidez disponible
   </Accordion>
 
-  <Accordion title="Que pasa si deposito en Ethereum y quiero mover a Arbitrum?">
+  <Accordion title="¿Qué pasa si deposito en Ethereum y quiero mover a Arbitrum?">
     Pan maneja esto automaticamente. Si ejecutas un intent de `lend` con
     `preferredChain: 'arbitrum'` pero tus fondos estan en Ethereum, Pan:
     1. Retira de Aave Ethereum (si aplica)
@@ -291,7 +291,7 @@ Las siguientes chains estan en evaluacion para futuras versiones:
     Todo en un solo intent.
   </Accordion>
 
-  <Accordion title="Cuanto tiempo toma un bridge?">
+  <Accordion title="¿Cuánto tiempo toma un bridge?">
     Depende de las chains involucradas:
     - L2 a L2 (Arbitrum ↔ Base): 2-10 minutos
     - Ethereum a L2: 10-30 minutos
