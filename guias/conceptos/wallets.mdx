@@ -14,14 +14,13 @@ Una wallet de Pan es una cuenta no-custodial que:
 - **Ligada a un usuario**: Cada wallet pertenece a un `userId` de tu aplicacion
 - **Multi-token**: Soporta multiples tokens por chain
 
-```mermaid
-flowchart TB
-    Wallet["📱 Wallet: pan_wallet_abc123<br/>Address: 0x742d35Cc..."]
+| Chain | Balances |
+|-------|----------|
+| Ethereum | 200 USDC, 0.5 ETH |
+| Arbitrum | 500 USDC, 0.1 ETH |
+| Base | 300 USDC |
 
-    Wallet --> ETH["🔷 Ethereum<br/>200 USDC, 0.5 ETH"]
-    Wallet --> ARB["🔵 Arbitrum<br/>500 USDC, 0.1 ETH"]
-    Wallet --> BASE["🔵 Base<br/>300 USDC"]
-```
+Todos accesibles con la misma direccion `0x742d35Cc...`
 
 <Info>
   **Una direccion, multiples chains**: La misma direccion `0x742d35Cc...` funciona en todas las redes EVM.
@@ -264,66 +263,33 @@ Pan utiliza Privy para generar wallets. La magia de "una direccion, multiples ch
 2. **Privy como Custodio Tecnico**: Privy maneja las llaves de forma segura
 3. **Tu Aplicacion No Tiene Acceso**: Las llaves nunca salen de la infraestructura de Privy
 
-```mermaid
-sequenceDiagram
-    participant App as Tu Aplicacion
-    participant Pan as Pan API
-    participant Privy as Privy (Custodio)
-    participant DB as Base de Datos
+<Steps>
+  <Step title="Tu app llama a Pan">
+    `wallet.create({ userId: '123' })`
+  </Step>
+  <Step title="Pan solicita wallet a Privy">
+    Privy genera llave privada, deriva direccion, y la almacena encriptada
+  </Step>
+  <Step title="Pan guarda el mapeo">
+    Se registra la relacion userId → walletId en la base de datos
+  </Step>
+  <Step title="Pan retorna la wallet">
+    Tu app recibe `{ id, address, chains[] }`
+  </Step>
+</Steps>
 
-    App->>Pan: wallet.create({ userId: '123' })
-
-    rect rgb(255, 243, 224)
-        note right of Pan: Creacion de Wallet
-        Pan->>Privy: Crear wallet EVM
-        Privy->>Privy: Generar llave privada
-        Privy->>Privy: Derivar direccion
-        Privy->>Privy: Encriptar y almacenar llave
-        Privy-->>Pan: Direccion: 0x742d35...
-    end
-
-    Pan->>DB: Guardar mapeo userId → walletId
-    DB-->>Pan: OK
-
-    Pan-->>App: { id, address, chains[] }
-
-    note over App,Privy: La llave privada NUNCA sale de Privy
-```
+<Warning>
+  La llave privada **nunca** sale de Privy. Tu aplicacion solo recibe la direccion publica.
+</Warning>
 
 ### Arquitectura de Seguridad
 
-```mermaid
-flowchart LR
-    subgraph YourApp["Tu Aplicacion"]
-        SDK["Pan SDK"]
-    end
-
-    subgraph PanAPI["Pan API"]
-        WalletService["Wallet Service"]
-        IntentService["Intent Service"]
-    end
-
-    subgraph Privy["Privy (Custodio)"]
-        KeyGen["Key Generation"]
-        KeyStore["Encrypted Key Storage"]
-        Signer["Transaction Signer"]
-    end
-
-    subgraph Chains["Blockchains"]
-        ETH["Ethereum"]
-        ARB["Arbitrum"]
-        BASE["Base"]
-    end
-
-    SDK -->|API Key| WalletService
-    WalletService -->|Crear/Firmar| Privy
-    IntentService -->|Ejecutar txn| Privy
-    Privy -->|Transacciones firmadas| Chains
-
-    style Privy fill:#e8f5e9,stroke:#388e3c
-    style PanAPI fill:#fff3e0,stroke:#f57c00
-    style YourApp fill:#e3f2fd,stroke:#1976d2
-```
+| Capa | Componentes | Responsabilidad |
+|------|-------------|-----------------|
+| **Tu Aplicacion** | Pan SDK | Envia requests con API Key |
+| **Pan API** | Wallet Service, Intent Service | Orquesta operaciones |
+| **Privy (Custodio)** | Key Generation, Encrypted Storage, Signer | Genera, almacena y firma |
+| **Blockchains** | Ethereum, Arbitrum, Base | Reciben transacciones firmadas |
 
 ## Limites de Wallets
 

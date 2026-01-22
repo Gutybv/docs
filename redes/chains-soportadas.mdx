@@ -5,12 +5,11 @@ description: "Blockchains compatibles con Pan"
 
 ## Vision General
 
-```mermaid
-flowchart TB
-    ETH["🔷 Ethereum - L1"]
-    ETH --> ARB["🔵 Arbitrum One - L2"]
-    ETH --> BASE["🔵 Base - L2"]
-```
+| Layer | Chain | Chain ID |
+|-------|-------|----------|
+| L1 | Ethereum | 1 |
+| L2 | Arbitrum One | 42161 |
+| L2 | Base | 8453 |
 
 Los L2 (Arbitrum, Base) heredan la seguridad de Ethereum.
 
@@ -127,20 +126,11 @@ Wallet Factory: 0x... (pendiente)
 
 ## Comparativa de Chains
 
-```mermaid
-quadrantChart
-    title Comparativa de Chains
-    x-axis Bajo Costo --> Alto Costo
-    y-axis Lenta --> Rapida
-    quadrant-1 Rapida y Cara
-    quadrant-2 Rapida y Barata
-    quadrant-3 Lenta y Barata
-    quadrant-4 Lenta y Cara
-
-    Base: [0.15, 0.85]
-    Arbitrum: [0.25, 0.90]
-    Ethereum: [0.85, 0.35]
-```
+| Chain | Costo | Velocidad | Posicion |
+|-------|-------|-----------|----------|
+| Base | Muy bajo | Rapida | Rapida y Barata |
+| Arbitrum | Bajo | Muy rapida | Rapida y Barata |
+| Ethereum | Alto | Lenta | Lenta y Cara |
 
 <Info>
   **Base** y **Arbitrum** ofrecen el mejor balance entre velocidad y costo. **Ethereum** es ideal para montos grandes donde la seguridad es prioridad.
@@ -193,25 +183,9 @@ const intent = await pan.lend({
 
 ### Bridge Entre Chains
 
-```mermaid
-flowchart LR
-    subgraph Source["Chain Origen"]
-        S1["Base<br/>500 USDC"]
-    end
-
-    Bridge["🌉 Across Protocol<br/>~2-10 min"]
-
-    subgraph Dest["Chain Destino"]
-        D1["Arbitrum<br/>~499 USDC"]
-    end
-
-    Source --> Bridge
-    Bridge --> Dest
-
-    style Source fill:#0052ff,stroke:#003db3,color:#fff
-    style Dest fill:#28a0f0,stroke:#1a6fb0,color:#fff
-    style Bridge fill:#fff3e0,stroke:#f57c00
-```
+| Origen | Bridge | Destino |
+|--------|--------|---------|
+| Base: 500 USDC | Across Protocol (~2-10 min) | Arbitrum: ~499 USDC |
 
 ```typescript
 // Mover de Base a Arbitrum

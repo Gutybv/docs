@@ -418,27 +418,19 @@ curl -X GET https://api.pan.dev/v1/intents/intent_xyz789 \
 ```
 </CodeGroup>
 
-## Arquitectura de Alto Nivel
+## Arquitectura
 
-```mermaid
-flowchart TB
-    App["🖥️ Tu App"]
-
-    App --> API["Pan API"]
-
-    API --> Planner["Intent Planner"]
-    API --> Engine["Execution Engine"]
-
-    Planner --> Engine
-
-    Engine --> ETH["Ethereum"]
-    Engine --> ARB["Arbitrum"]
-    Engine --> BASE["Base"]
-```
-
-<Tip>
-  **Flujo simplificado**: Tu app habla con Pan API, Pan planifica la mejor estrategia, y ejecuta automaticamente en blockchain.
-</Tip>
+<Steps>
+  <Step title="Tu App">
+    Llama a Pan API via SDK o REST
+  </Step>
+  <Step title="Pan API">
+    Planifica la estrategia optima y ejecuta automaticamente
+  </Step>
+  <Step title="Blockchains">
+    Ethereum, Arbitrum, Base - todo manejado por Pan
+  </Step>
+</Steps>
 
 ## Planes y Precios
 

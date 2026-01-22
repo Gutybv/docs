@@ -91,27 +91,6 @@ Pan API usa codigos HTTP estandar:
 
 ## Resumen de Endpoints
 
-```mermaid
-flowchart TB
-    API["Pan API v1"]
-
-    API --> Wallets["📁 Wallets"]
-    API --> Intents["📁 Intents"]
-    API --> Yields["📁 Yields"]
-    API --> Demo["📁 Demo"]
-
-    Wallets --> W1["POST /wallets"]
-    Wallets --> W2["GET /wallets/:userId"]
-    Wallets --> W3["GET /balances/:walletId"]
-
-    Intents --> I1["POST /intents"]
-    Intents --> I2["GET /intents/:id"]
-
-    Yields --> Y1["GET /yields"]
-
-    Demo --> D1["POST /demo/fund"]
-```
-
 ### Wallets
 
 | Metodo | Endpoint | Descripcion |

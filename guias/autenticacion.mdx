@@ -23,28 +23,20 @@ Pan API soporta multiples metodos de autenticacion para diferentes casos de uso.
 
 La autenticacion por API Key es el metodo principal y recomendado para la mayoria de las integraciones.
 
-```mermaid
-sequenceDiagram
-    participant App as Tu Aplicacion
-    participant API as Pan API
-    participant Auth as Auth Service
-    participant DB as Database
-
-    App->>API: Request + Authorization: Bearer pan_sk_xxx
-    API->>Auth: Validar API Key
-
-    rect rgb(232, 245, 233)
-        Auth->>DB: Buscar developer por key
-        DB-->>Auth: Developer data + plan
-        Auth->>Auth: Verificar plan activo
-        Auth->>DB: Deducir 1 credito
-        DB-->>Auth: Creditos restantes
-    end
-
-    Auth-->>API: Request autorizado
-    API->>API: Procesar request
-    API-->>App: Response + x-credits-remaining header
-```
+<Steps>
+  <Step title="Request">
+    Tu app envia request con header `Authorization: Bearer pan_sk_xxx`
+  </Step>
+  <Step title="Validacion">
+    Pan valida la API key y verifica el plan del developer
+  </Step>
+  <Step title="Creditos">
+    Se deduce 1 credito del balance
+  </Step>
+  <Step title="Response">
+    Respuesta incluye header `x-credits-remaining` con creditos restantes
+  </Step>
+</Steps>
 
 ### Formato de API Key
 
@@ -256,22 +248,20 @@ Stack Auth se usa exclusivamente para autenticar usuarios en el dashboard web de
 
 ### Flujo de Autenticacion
 
-```mermaid
-sequenceDiagram
-    actor User as Usuario
-    participant Dash as Dashboard Pan
-    participant Stack as Stack Auth
-    participant Session as Sesion
-
-    User->>Dash: Visita dashboard
-    Dash->>Stack: Redirige a login
-    Stack->>User: Muestra formulario
-    User->>Stack: Credenciales
-    Stack->>Stack: Valida usuario
-    Stack-->>Dash: Token de sesion
-    Dash->>Session: Crear sesion
-    Session-->>User: Dashboard cargado ✓
-```
+<Steps>
+  <Step title="Usuario visita dashboard">
+    Accede a app.pan.dev
+  </Step>
+  <Step title="Redireccion a Stack Auth">
+    El dashboard redirige al formulario de login
+  </Step>
+  <Step title="Usuario ingresa credenciales">
+    Stack Auth valida el usuario
+  </Step>
+  <Step title="Sesion creada">
+    Stack Auth retorna token, dashboard crea sesion y carga
+  </Step>
+</Steps>
 
 ### No Usar para API
 

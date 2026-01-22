@@ -7,26 +7,13 @@ Pan API esta construida alrededor de tres conceptos fundamentales que trabajan j
 
 ## Arquitectura de Alto Nivel
 
-```mermaid
-flowchart TB
-    App["🖥️ Tu Aplicacion"]
-    App --> SDK["SDK / REST"]
-
-    SDK --> API["Pan API"]
-
-    API --> Wallets["Wallets Service"]
-    API --> Intents["Intents Service"]
-    API --> Yields["Yields Service"]
-
-    Intents --> Planner["Intent Planner"]
-    Planner --> Engine["Execution Engine"]
-
-    Engine --> Chains["Blockchains"]
-
-    Chains --> ETH["Ethereum"]
-    Chains --> ARB["Arbitrum"]
-    Chains --> BASE["Base"]
-```
+| Capa | Componentes | Funcion |
+|------|-------------|---------|
+| **Tu App** | SDK / REST Client | Envia requests a Pan |
+| **Pan API** | Wallets, Intents, Yields | Servicios principales |
+| **Planificacion** | Intent Planner | Analiza y optimiza estrategias |
+| **Ejecucion** | Execution Engine | Ejecuta bridges, swaps, deposits |
+| **Blockchains** | Ethereum, Arbitrum, Base | Destino final de operaciones |
 
 ## Los Tres Pilares
 
@@ -176,70 +163,41 @@ flowchart TB
 
 ## Modelo de Datos
 
-Pan usa un modelo de datos jerarquico que conecta desarrolladores, wallets, e intents:
+Pan usa un modelo de datos jerarquico:
 
-```mermaid
-erDiagram
-    DEVELOPER ||--o{ API_KEY : tiene
-    DEVELOPER ||--o{ WALLET : crea
-    WALLET ||--o{ INTENT : ejecuta
-    WALLET ||--o{ BALANCE : contiene
-
-    DEVELOPER {
-        string id PK
-        string email
-        string plan
-        timestamp created_at
-    }
-
-    API_KEY {
-        string key PK
-        string developer_id FK
-        string environment
-        boolean active
-    }
-
-    WALLET {
-        string id PK
-        string developer_id FK
-        string user_id
-        string address
-        string chain_type
-    }
-
-    BALANCE {
-        string wallet_id FK
-        string chain
-        string token
-        number amount
-        number usd_value
-    }
-
-    INTENT {
-        string id PK
-        string wallet_id FK
-        string action
-        string status
-        json execution_plan
-        json results
-    }
+```
+Developer
+├── API Keys (dev, prod)
+└── Wallets
+    ├── Balances (por chain)
+    └── Intents (operaciones)
 ```
 
-### Jerarquia Visual
+<AccordionGroup>
+  <Accordion title="Developer">
+    | Campo | Tipo | Descripcion |
+    |-------|------|-------------|
+    | `id` | string | Identificador unico |
+    | `email` | string | Email del desarrollador |
+    | `plan` | string | Plan de suscripcion |
+  </Accordion>
 
-```mermaid
-flowchart TB
-    Dev["👤 Developer"]
-    Dev --> Keys["🔑 API Keys"]
-    Keys --> DevKey["pan_sk_dev_..."]
-    Keys --> ProdKey["pan_sk_prod_..."]
+  <Accordion title="Wallet">
+    | Campo | Tipo | Descripcion |
+    |-------|------|-------------|
+    | `id` | string | ID unico (`pan_wallet_...`) |
+    | `userId` | string | Usuario en tu app |
+    | `address` | string | Direccion blockchain |
+  </Accordion>
 
-    Dev --> W1["Wallet: Usuario A"]
-    Dev --> W2["Wallet: Usuario B"]
-
-    W1 --> B1["Balances: 1000 USDC"]
-    W1 --> I1["Intents: lend, withdraw"]
-```
+  <Accordion title="Intent">
+    | Campo | Tipo | Descripcion |
+    |-------|------|-------------|
+    | `id` | string | ID unico |
+    | `action` | string | lend, withdraw, bridge |
+    | `status` | string | pending, executing, completed |
+  </Accordion>
+</AccordionGroup>
 
 ### Desarrolladores y API Keys
 

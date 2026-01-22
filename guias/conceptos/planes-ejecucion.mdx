@@ -9,19 +9,20 @@ Los Planes de Ejecucion son estrategias detalladas que Pan genera automaticament
 
 Cuando creas un intent, Pan no ejecuta inmediatamente. Primero pasa por una fase de planificacion sofisticada:
 
-```mermaid
-flowchart TB
-    A["1️⃣ Analizar balances"] --> B["2️⃣ Evaluar APYs"]
-    B --> C["3️⃣ Optimizar ruta"]
-    C --> D["4️⃣ Generar plan"]
-    D --> E["📋 ExecutionPlan"]
-```
-
-**Fases de planificacion:**
-1. **Analisis**: Consultar balances en todas las chains
-2. **Evaluacion**: Obtener APYs y verificar liquidez
-3. **Optimizacion**: Calcular rutas y costos de bridge
-4. **Generacion**: Ordenar operaciones y estimar tiempos
+<Steps>
+  <Step title="Analisis de Estado">
+    Consultar balances en todas las chains e identificar tokens disponibles
+  </Step>
+  <Step title="Evaluacion de Protocolos">
+    Obtener APYs de Aave en cada chain y verificar liquidez
+  </Step>
+  <Step title="Optimizacion de Ruta">
+    Calcular opciones de bridge y estimar costos de gas
+  </Step>
+  <Step title="Generacion de Plan">
+    Ordenar operaciones y calcular tiempos estimados
+  </Step>
+</Steps>
 
 ## Estructura de un Plan de Ejecucion
 
@@ -302,88 +303,36 @@ Intercambia un token por otro (en desarrollo).
 
 Una vez generado el plan, Pan ejecuta cada paso en secuencia:
 
-```mermaid
-flowchart TB
-    Start([Iniciar Ejecucion]) --> Loop
+**Para cada paso en el plan:**
 
-    subgraph Loop["Para cada paso en el plan"]
-        direction TB
+<Steps>
+  <Step title="Preparacion">
+    Verificar balance y gas disponible, preparar datos de la transaccion
+  </Step>
+  <Step title="Ejecucion">
+    Firmar via Privy, enviar a blockchain, obtener txHash
+  </Step>
+  <Step title="Confirmacion">
+    Esperar 1-2 bloques, verificar exito, actualizar estado
+  </Step>
+  <Step title="Registro">
+    Guardar txHash y gas usado, calcular costo USD, incrementar completedSteps
+  </Step>
+</Steps>
 
-        subgraph Prep["1. PREPARACION"]
-            P1["Verificar balance"]
-            P2["Verificar gas"]
-            P3["Preparar datos txn"]
-        end
+Si un paso falla, se registra el error y el intent se marca como `failed`. Si todos los pasos completan, el intent queda `completed`.
 
-        subgraph Exec["2. EJECUCION"]
-            E1["Firmar via Privy"]
-            E2["Enviar a blockchain"]
-            E3["Obtener txHash"]
-        end
+### Detalle de Ejecucion por Paso
 
-        subgraph Confirm["3. CONFIRMACION"]
-            C1["Esperar 1-2 bloques"]
-            C2["Verificar exito"]
-            C3["Actualizar estado"]
-        end
+Para cada paso en el plan:
 
-        subgraph Record["4. REGISTRO"]
-            R1["Guardar txHash + gas"]
-            R2["Calcular costo USD"]
-            R3["Incrementar completedSteps"]
-        end
-
-        Prep --> Exec --> Confirm --> Record
-    end
-
-    Record --> Check{Mas pasos?}
-    Check -->|Si| Loop
-    Check -->|No| Success([Completed])
-
-    Confirm --> Fail{Fallo?}
-    Fail -->|Si| HandleError["Registrar error<br/>Marcar failed"]
-    HandleError --> Failed([Failed])
-
-    style Start fill:#e3f2fd,stroke:#1976d2
-    style Success fill:#c8e6c9,stroke:#2e7d32
-    style Failed fill:#ffcdd2,stroke:#c62828
-    style Prep fill:#e8eaf6,stroke:#3f51b5
-    style Exec fill:#fff3e0,stroke:#f57c00
-    style Confirm fill:#e8f5e9,stroke:#388e3c
-    style Record fill:#fce4ec,stroke:#c2185b
-```
-
-### Diagrama de Secuencia Detallado
-
-```mermaid
-sequenceDiagram
-    participant Engine as Execution Engine
-    participant Privy as Privy Wallet
-    participant Chain as Blockchain
-    participant DB as Database
-
-    loop Para cada paso
-        Engine->>Engine: Verificar precondiciones
-        Engine->>Privy: Firmar transaccion
-        Privy-->>Engine: Transaccion firmada
-
-        Engine->>Chain: Enviar transaccion
-        Chain-->>Engine: txHash
-
-        loop Esperar confirmacion
-            Engine->>Chain: getTransactionReceipt
-            Chain-->>Engine: receipt (o null)
-        end
-
-        alt Transaccion exitosa
-            Engine->>DB: Guardar resultado
-            Engine->>Engine: completedSteps++
-        else Transaccion fallida
-            Engine->>DB: Registrar error
-            Engine-->>Engine: Detener ejecucion
-        end
-    end
-```
+| Fase | Accion | Resultado |
+|------|--------|-----------|
+| Precondiciones | Engine verifica balance y gas | Continua o falla |
+| Firma | Engine solicita firma a Privy | Transaccion firmada |
+| Envio | Engine envia txn a blockchain | Recibe txHash |
+| Confirmacion | Engine espera receipt | Loop hasta confirmado |
+| Registro | Guardar en DB | completedSteps++ o error |
 
 ## Monitorear Ejecucion
 

@@ -106,23 +106,10 @@ console.log('Explorer:', result.explorerUrl);
 
 ## Rate Limiting
 
-```mermaid
-sequenceDiagram
-    participant App as Tu App
-    participant API as Pan API
-    participant Faucet as Faucet
-
-    App->>API: POST /demo/fund
-    API->>API: Check rate limit
-    alt Dentro del limite
-        API->>Faucet: Enviar 1 USDC
-        Faucet-->>API: txHash
-        API-->>App: 200 OK + txHash
-    else Rate limited
-        API-->>App: 429 Too Many Requests
-        Note right of App: Esperar 60 segundos
-    end
-```
+| Escenario | Respuesta |
+|-----------|-----------|
+| Dentro del limite | `200 OK` + txHash |
+| Rate limited | `429 Too Many Requests` - esperar 60 segundos |
 
 ## Notas
 

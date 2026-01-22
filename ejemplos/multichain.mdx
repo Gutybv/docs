@@ -12,14 +12,14 @@ Una plataforma DeFi quiere:
 
 ## Entendiendo Multi-Chain
 
-```mermaid
-flowchart LR
-    A["❌ Sin Pan: 6 pasos manuales"] --> B["✅ Con Pan: 1 llamada"]
-```
-
-**Sin Pan** necesitas: aprobar tokens, configurar bridge, esperar, verificar balance, aprobar para Aave, depositar.
-
-**Con Pan**: `pan.lend()` y listo.
+<Columns cols={2}>
+  <Card title="Sin Pan" icon="xmark">
+    6 pasos manuales: aprobar tokens, configurar bridge, esperar, verificar balance, aprobar para Aave, depositar
+  </Card>
+  <Card title="Con Pan" icon="check">
+    1 llamada: `pan.lend()` y listo
+  </Card>
+</Columns>
 
 ### El Problema
 
@@ -74,13 +74,13 @@ const intent = await pan.lend({
 
 ## Consolidacion de Fondos
 
-```mermaid
-flowchart LR
-    ETH["ETH: $200"] --> Pan["🔄 Pan"]
-    ARB["ARB: $500"] --> Pan
-    BASE1["Base: $300"] --> Pan
-    Pan --> BASE2["Base: $1000 USDC<br/>8.5% APY"]
-```
+| Antes | Despues |
+|-------|---------|
+| Ethereum: $200 USDC | |
+| Arbitrum: $500 USDC | Base: $1000 USDC |
+| Base: $300 USDC | 8.5% APY |
+
+Pan consolida automaticamente los fondos en la chain con mejor rendimiento.
 
 ### Detectar Fondos Distribuidos
 
