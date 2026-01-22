@@ -50,21 +50,30 @@ Los APYs son dinamicos y cambian constantemente. Consulta el endpoint
 
 ### Direcciones de Aave V3
 
-#### Pool (Lending Pool)
+#### Mainnet - Pool (Lending Pool)
 
-| Chain | Direccion |
-|-------|-----------|
-| Ethereum | `0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2` |
-| Arbitrum | `0x794a61358D6845594F94dc1DB02A252b5b4814aD` |
-| Base | `0xA238Dd80C259a72e81d7e4664a9801593F98d1c5` |
+| Chain | Pool | Pool Data Provider |
+|-------|------|-------------------|
+| Ethereum | `0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2` | `0x41393e5e337606dc3821075Af65AeE84D7688CBD` |
+| Arbitrum | `0x794a61358D6845594F94dc1DB02A252b5b4814aD` | `0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654` |
+| Base | `0xA238Dd80C259a72e81d7e4664a9801593F98d1c5` | `0x2d8A3C5677189723C4cB8873CfC9C8976FDF38Ac` |
+
+#### Testnet - Pool (Lending Pool)
+
+| Chain | Pool | Pool Data Provider |
+|-------|------|-------------------|
+| Sepolia | `0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951` | `0x3e9708d80f7B3e43118013075F7e95CE3AB31F31` |
+| Arbitrum Sepolia | `0xBfC91D59fdAA134A4ED45f7B584cAf96D7792Eff` | `0x12373B5085e3b42D42C1D4ABF3B3Cf4Df0E0Fa01` |
+| Base Sepolia | `0x07eA79F68B2B3df564D0A34F8e19D9B1e339814b` | `0x9e198B4FaCf5435A3f6De9C19c5A1c53618Cf7F0` |
 
 #### aUSDC (Token de deposito)
 
-| Chain | Direccion |
-|-------|-----------|
+| Chain | Direccion aUSDC |
+|-------|-----------------|
 | Ethereum | `0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c` |
 | Arbitrum | `0x724dc807b04555b71ed48a6896b6F41593b8C637` |
 | Base | `0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB` |
+| Arbitrum Sepolia | `0x460b97BD498E1157530AEb3086301d5225b91216` |
 
 ### Seguridad de Aave
 
@@ -155,13 +164,25 @@ Ejemplo para bridge de 1000 USDC:
 
 ### Direcciones de Across
 
-#### SpokePool (Contrato principal)
+#### SpokePool - Testnet (Usado actualmente)
+
+| Chain | Direccion |
+|-------|-----------|
+| Sepolia | `0x5ef6C01E11889d86803e0B23e3cB3F9E9d97B662` |
+| Arbitrum Sepolia | `0x7E63A5f1a8F0B4d0934B2f2327DAED3F6bb2ee75` |
+| Base Sepolia | `0x53c2D9B6E5feE26DFAf9947135bf1f8FFe70ef06` |
+
+#### SpokePool - Mainnet (Proximo)
 
 | Chain | Direccion |
 |-------|-----------|
 | Ethereum | `0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5` |
 | Arbitrum | `0xe35e9842fceaCA96570B734083f4a58e8F7C5f2A` |
 | Base | `0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64` |
+
+<Info>
+  **API de Across**: Pan usa `https://testnet.across.to/api` para obtener quotes y verificar estado de bridges en testnet.
+</Info>
 
 ### Seguridad de Across
 

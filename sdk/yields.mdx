@@ -8,65 +8,56 @@ description: "Consultar APYs con el SDK"
 ```typescript
 const yields = await pan.yields.getAll();
 
-console.log('Mejor APY:', yields.bestYield.apy, '%');
-console.log('En chain:', yields.bestYield.chain);
+console.log('Mejor APY:', yields.best.apy, '%');
+console.log('En chain:', yields.best.chain);
 ```
 
 ## Estructura de Respuesta
 
 ```typescript
 interface YieldsResponse {
-  yields: Yield[];
-  bestYield: {
+  rates: Rate[];
+  best: {
     chain: string;
-    protocol: string;
     asset: string;
     apy: number;
+    reasoning: string;
   };
-  updatedAt: string;
 }
 
-interface Yield {
+interface Rate {
   chain: string;
-  chainId: number;
   protocol: string;
-  protocolVersion: string;
   asset: string;
-  assetAddress: string;
   apy: number;
-  apyBase: number;
-  apyReward: number;
-  tvl: number;
-  riskLevel: 'low' | 'medium' | 'high';
-  updatedAt: string;
 }
 ```
 
 ## Listar Yields
 
 ```typescript
-const { yields, bestYield } = await pan.yields.getAll();
+const { rates, best } = await pan.yields.getAll();
 
 // Ordenar por APY
-const sorted = [...yields].sort((a, b) => b.apy - a.apy);
+const sorted = [...rates].sort((a, b) => b.apy - a.apy);
 
 sorted.forEach(y => {
-  const isBest = y.chain === bestYield.chain ? ' (MEJOR)' : '';
+  const isBest = y.chain === best.chain ? ' (MEJOR)' : '';
   console.log(`${y.chain}: ${y.apy.toFixed(2)}%${isBest}`);
 });
 ```
 
 ## Helpers
 
-### Yield por Chain
+### Rate por Chain
 
 ```typescript
-function getYieldForChain(yields: YieldsResponse, chain: string): Yield | undefined {
-  return yields.yields.find(y => y.chain === chain);
+function getRateForChain(yields: YieldsResponse, chain: string): Rate | undefined {
+  return yields.rates.find(y => y.chain === chain);
 }
 
-const baseYield = getYieldForChain(yields, 'base');
-console.log('Base APY:', baseYield?.apy);
+const baseRate = getRateForChain(yields, 'base');
+console.log('Base APY:', baseRate?.apy);
 ```
 
 ### Calcular Ganancias
@@ -133,8 +124,8 @@ export function useYields(options: UseYieldsOptions = {}) {
   }, [autoRefresh, refreshInterval, fetch]);
 
   return {
-    yields: yields?.yields || [],
-    bestYield: yields?.bestYield,
+    rates: yields?.rates || [],
+    best: yields?.best,
     loading,
     error,
     refresh: fetch
@@ -145,15 +136,15 @@ export function useYields(options: UseYieldsOptions = {}) {
 ```tsx
 // Uso
 function YieldsDisplay() {
-  const { yields, bestYield, loading } = useYields({ autoRefresh: true });
+  const { rates, best, loading } = useYields({ autoRefresh: true });
 
   if (loading) return <div>Cargando yields...</div>;
 
   return (
     <div>
-      {bestYield && (
+      {best && (
         <div className="best-yield">
-          Mejor: {bestYield.apy.toFixed(2)}% en {bestYield.chain}
+          Mejor: {best.apy.toFixed(2)}% en {best.chain}
         </div>
       )}
 
@@ -162,15 +153,13 @@ function YieldsDisplay() {
           <tr>
             <th>Chain</th>
             <th>APY</th>
-            <th>TVL</th>
           </tr>
         </thead>
         <tbody>
-          {yields.map(y => (
+          {rates.map(y => (
             <tr key={y.chain}>
               <td>{y.chain}</td>
               <td>{y.apy.toFixed(2)}%</td>
-              <td>${(y.tvl / 1e6).toFixed(1)}M</td>
             </tr>
           ))}
         </tbody>

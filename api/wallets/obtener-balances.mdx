@@ -29,52 +29,58 @@ API Key o X402
 {
   "walletId": "pan_wallet_a1b2c3d4e5f6",
   "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-  "balances": {
-    "ethereum": [
-      {
-        "symbol": "USDC",
-        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        "balance": "200000000",
-        "balanceFormatted": "200.00",
-        "decimals": 6,
-        "usdValue": 200.00
-      },
-      {
-        "symbol": "ETH",
-        "address": "0x0000000000000000000000000000000000000000",
-        "balance": "500000000000000000",
-        "balanceFormatted": "0.50",
-        "decimals": 18,
-        "usdValue": 1250.00
-      }
-    ],
-    "arbitrum": [
-      {
-        "symbol": "USDC",
-        "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-        "balance": "500000000",
-        "balanceFormatted": "500.00",
-        "decimals": 6,
-        "usdValue": 500.00
-      }
-    ],
-    "base": []
-  },
-  "totalUsdValue": 1950.00,
-  "updatedAt": "2024-01-15T10:35:00Z"
+  "chains": [
+    {
+      "chain": "arbitrum-sepolia",
+      "tokens": [
+        {
+          "asset": "USDC",
+          "balance": "500000000",
+          "balanceFormatted": "500.00",
+          "decimals": 6,
+          "valueUsd": 500.00
+        }
+      ]
+    },
+    {
+      "chain": "base-sepolia",
+      "tokens": [
+        {
+          "asset": "USDC",
+          "balance": "200000000",
+          "balanceFormatted": "200.00",
+          "decimals": 6,
+          "valueUsd": 200.00
+        }
+      ]
+    }
+  ],
+  "totalValueUsd": 700.00
 }
 ```
+
+<Warning>
+  **Cambio de estructura**: La respuesta usa un array `chains` en lugar de un objeto `balances`. Cada chain contiene su propio array de `tokens`.
+</Warning>
+
+### Campos de Respuesta
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `walletId` | string | ID de la wallet |
+| `address` | string | Direccion de la wallet |
+| `chains` | array | Lista de chains con balances |
+| `totalValueUsd` | number | Valor total en USD |
 
 ### Campos de Token
 
 | Campo | Tipo | Descripcion |
 |-------|------|-------------|
-| `symbol` | string | Simbolo del token |
-| `address` | string | Direccion del contrato |
+| `asset` | string | Simbolo del token (USDC, WETH, etc.) |
 | `balance` | string | Balance en unidades minimas |
 | `balanceFormatted` | string | Balance con decimales |
 | `decimals` | number | Decimales del token |
-| `usdValue` | number | Valor en USD |
+| `valueUsd` | number | Valor en USD (opcional) |
 
 ### Errores
 
@@ -101,18 +107,19 @@ const response = await fetch(
   }
 );
 
-const { balances, totalUsdValue } = await response.json();
+const response = await response.json();
+console.log('Total USD:', response.totalValueUsd);
 ```
 
 ```typescript SDK
 const balances = await pan.wallet.getBalances('pan_wallet_a1b2c3d4e5f6');
-console.log('Total USD:', balances.totalUsdValue);
+console.log('Total USD:', balances.totalValueUsd);
 ```
 </CodeGroup>
 
 ## Notas
 
 - Los balances se consultan en tiempo real de cada blockchain
-- El campo `totalUsdValue` suma todos los tokens
-- Las chains sin tokens retornan array vacio `[]`
+- El campo `totalValueUsd` suma todos los tokens
+- Las chains sin tokens retornan array vacio de `tokens: []`
 - Los precios USD se actualizan cada minuto

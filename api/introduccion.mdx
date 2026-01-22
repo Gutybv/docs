@@ -91,6 +91,33 @@ Pan API usa codigos HTTP estandar:
 
 ## Resumen de Endpoints
 
+```mermaid
+flowchart LR
+    subgraph Wallets["Wallets"]
+        W1["POST /wallets<br/>Crear wallet"]
+        W2["GET /wallets/:userId<br/>Obtener wallet"]
+        W3["GET /balances/:walletId<br/>Obtener balances"]
+    end
+
+    subgraph Intents["Intents"]
+        I1["POST /intents<br/>Crear intent"]
+        I2["GET /intents/:id<br/>Obtener estado"]
+    end
+
+    subgraph Yields["Yields"]
+        Y1["GET /yields<br/>Obtener APYs"]
+    end
+
+    subgraph Demo["Demo"]
+        D1["POST /demo/fund<br/>Fondear testnet"]
+    end
+
+    style Wallets fill:#e3f2fd,stroke:#1976d2
+    style Intents fill:#fff3e0,stroke:#f57c00
+    style Yields fill:#e8f5e9,stroke:#388e3c
+    style Demo fill:#f3e5f5,stroke:#7b1fa2
+```
+
 ### Wallets
 
 | Metodo | Endpoint | Descripcion |

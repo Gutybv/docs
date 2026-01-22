@@ -53,12 +53,12 @@ console.log(wallet.address);
 ```typescript
 const balances = await pan.wallet.getBalances('pan_wallet_abc123');
 
-console.log('Total USD:', balances.totalUsdValue);
+console.log('Total USD:', balances.totalValueUsd);
 
 // Iterar por chain
-for (const [chain, tokens] of Object.entries(balances.balances)) {
-  for (const token of tokens) {
-    console.log(`${chain}: ${token.balanceFormatted} ${token.symbol}`);
+for (const chainData of balances.chains) {
+  for (const token of chainData.tokens) {
+    console.log(`${chainData.chain}: ${token.balanceFormatted} ${token.asset}`);
   }
 }
 ```
@@ -69,18 +69,21 @@ for (const [chain, tokens] of Object.entries(balances.balances)) {
 interface Balances {
   walletId: string;
   address: string;
-  balances: Record<string, TokenBalance[]>;
-  totalUsdValue: number;
-  updatedAt: string;
+  chains: ChainBalance[];
+  totalValueUsd: number;
+}
+
+interface ChainBalance {
+  chain: string;
+  tokens: TokenBalance[];
 }
 
 interface TokenBalance {
-  symbol: string;
-  address: string;
+  asset: string;
   balance: string;
   balanceFormatted: string;
   decimals: number;
-  usdValue: number;
+  valueUsd: number;
 }
 ```
 
@@ -92,8 +95,8 @@ interface TokenBalance {
 function getTotalBalance(balances: Balances, asset: string): number {
   let total = 0;
 
-  for (const tokens of Object.values(balances.balances)) {
-    const token = tokens.find(t => t.symbol === asset);
+  for (const chainData of balances.chains) {
+    const token = chainData.tokens.find(t => t.asset === asset);
     if (token) {
       total += parseFloat(token.balanceFormatted);
     }

@@ -271,11 +271,11 @@ class PanService {
   }
 
   async getTotalUSDC(userId: string): Promise<number> {
-    const balances = await this.getBalances(userId);
+    const response = await this.getBalances(userId);
 
     let total = 0;
-    for (const [chain, tokens] of Object.entries(balances.balances)) {
-      const usdc = tokens.find(t => t.symbol === 'USDC');
+    for (const chainData of response.chains) {
+      const usdc = chainData.tokens.find(t => t.asset === 'USDC');
       if (usdc) {
         total += parseFloat(usdc.balanceFormatted);
       }
@@ -422,7 +422,7 @@ class PanService {
     const yields = await this.pan.yields.getAll();
 
     // Obtener mejor APY de USDC
-    const usdcYields = yields.yields.filter(y => y.asset === 'USDC');
+    const usdcYields = yields.rates.filter(y => y.asset === 'USDC');
 
     if (usdcYields.length === 0) {
       return 0;

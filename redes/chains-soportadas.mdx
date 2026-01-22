@@ -3,6 +3,29 @@ title: "Chains Soportadas"
 description: "Blockchains compatibles con Pan"
 ---
 
+## Vision General
+
+```mermaid
+flowchart TB
+    subgraph L1["Layer 1"]
+        ETH["Ethereum<br/>Chain ID: 1<br/>🔷"]
+    end
+
+    subgraph L2["Layer 2 Rollups"]
+        ARB["Arbitrum One<br/>Chain ID: 42161<br/>🔵"]
+        BASE["Base<br/>Chain ID: 8453<br/>🔵"]
+    end
+
+    ETH -->|"Hereda seguridad"| ARB
+    ETH -->|"Hereda seguridad"| BASE
+
+    style L1 fill:#627eea,stroke:#627eea,color:#fff
+    style L2 fill:#e3f2fd,stroke:#1976d2
+    style ETH fill:#627eea,stroke:#3c3c3d,color:#fff
+    style ARB fill:#28a0f0,stroke:#1a6fb0,color:#fff
+    style BASE fill:#0052ff,stroke:#003db3,color:#fff
+```
+
 ## Chains en Produccion
 
 <CardGroup cols={3}>
@@ -116,6 +139,25 @@ Wallet Factory: 0x... (pendiente)
 
 ## Comparativa de Chains
 
+```mermaid
+quadrantChart
+    title Comparativa de Chains
+    x-axis Bajo Costo --> Alto Costo
+    y-axis Lenta --> Rapida
+    quadrant-1 Rapida y Cara
+    quadrant-2 Rapida y Barata
+    quadrant-3 Lenta y Barata
+    quadrant-4 Lenta y Cara
+
+    Base: [0.15, 0.85]
+    Arbitrum: [0.25, 0.90]
+    Ethereum: [0.85, 0.35]
+```
+
+<Info>
+  **Base** y **Arbitrum** ofrecen el mejor balance entre velocidad y costo. **Ethereum** es ideal para montos grandes donde la seguridad es prioridad.
+</Info>
+
 ### Costos de Gas
 
 | Operacion | Ethereum | Arbitrum | Base |
@@ -162,6 +204,26 @@ const intent = await pan.lend({
 ```
 
 ### Bridge Entre Chains
+
+```mermaid
+flowchart LR
+    subgraph Source["Chain Origen"]
+        S1["Base<br/>500 USDC"]
+    end
+
+    Bridge["🌉 Across Protocol<br/>~2-10 min"]
+
+    subgraph Dest["Chain Destino"]
+        D1["Arbitrum<br/>~499 USDC"]
+    end
+
+    Source --> Bridge
+    Bridge --> Dest
+
+    style Source fill:#0052ff,stroke:#003db3,color:#fff
+    style Dest fill:#28a0f0,stroke:#1a6fb0,color:#fff
+    style Bridge fill:#fff3e0,stroke:#f57c00
+```
 
 ```typescript
 // Mover de Base a Arbitrum

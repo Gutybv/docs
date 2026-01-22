@@ -246,9 +246,9 @@ async function ejemploCompleto() {
   const balances = await pan.wallet.getBalances(wallet.id);
 
   console.log('Balances por chain:');
-  for (const [chain, tokens] of Object.entries(balances.balances)) {
-    for (const token of tokens) {
-      console.log(`  ${chain}: ${token.balanceFormatted} ${token.symbol}`);
+  for (const chainData of balances.chains) {
+    for (const token of chainData.tokens) {
+      console.log(`  ${chainData.chain}: ${token.balanceFormatted} ${token.asset}`);
     }
   }
   // arbitrum: 500.00 USDC
@@ -256,10 +256,10 @@ async function ejemploCompleto() {
   // ethereum: 200.00 USDC
 
   // 3. Obtener mejores yields disponibles
-  const yields = await pan.yields.getAll();
+  const { rates, best } = await pan.yields.getAll();
 
   console.log('Mejores APYs:');
-  yields.forEach(y => {
+  rates.forEach(y => {
     console.log(`  ${y.chain}: ${y.apy}% en ${y.protocol}`);
   });
   // base: 8.5% en Aave
@@ -420,30 +420,62 @@ curl -X GET https://api.pan.dev/v1/intents/intent_xyz789 \
 
 ## Arquitectura de Alto Nivel
 
+```mermaid
+flowchart LR
+    subgraph App["Tu Aplicacion"]
+        Client["SDK / REST"]
+    end
+
+    subgraph PanAPI["Pan API"]
+        REST["REST Endpoints"]
+
+        subgraph Planning["Planificacion"]
+            IP["Intent<br/>Planner"]
+            BA["Balance<br/>Analyzer"]
+            YS["Yield<br/>Service"]
+        end
+
+        subgraph Execution["Ejecucion"]
+            EE["Execution<br/>Engine"]
+            Bridge["Bridge<br/>Executor"]
+            Deposit["Deposit<br/>Executor"]
+            Withdraw["Withdraw<br/>Executor"]
+        end
+
+        REST --> IP
+        IP --> BA
+        IP --> YS
+        IP --> EE
+        EE --> Bridge
+        EE --> Deposit
+        EE --> Withdraw
+    end
+
+    subgraph Chains["Blockchains"]
+        ETH["Ethereum"]
+        ARB["Arbitrum"]
+        BASE["Base"]
+
+        subgraph DeFi["Protocolos"]
+            AAVE["Aave"]
+            ACROSS["Across"]
+        end
+    end
+
+    App --> PanAPI
+    Execution --> Chains
+
+    style App fill:#e3f2fd,stroke:#1976d2
+    style PanAPI fill:#fff3e0,stroke:#f57c00
+    style Planning fill:#e8f5e9,stroke:#388e3c
+    style Execution fill:#fce4ec,stroke:#c2185b
+    style Chains fill:#f3e5f5,stroke:#7b1fa2
+    style DeFi fill:#fff9c4,stroke:#f9a825
 ```
-Tu Aplicacion
-     |
-     v
-+----------------+     +------------------+     +----------------+
-|   Pan API      | --> | Intent Planner   | --> | Execution      |
-|   (REST)       |     | (Estrategia)     |     | Engine         |
-+----------------+     +------------------+     +----------------+
-                              |                       |
-                              v                       v
-                       +-------------+         +-------------+
-                       | Balance     |         | Executors   |
-                       | Analyzer    |         | (Bridge,    |
-                       | Yield       |         |  Deposit,   |
-                       | Service     |         |  Swap)      |
-                       +-------------+         +-------------+
-                                                     |
-                                                     v
-                                            +------------------+
-                                            | Blockchains      |
-                                            | (ETH, Arbitrum,  |
-                                            |  Base, etc.)     |
-                                            +------------------+
-```
+
+<Tip>
+  **Flujo simplificado**: Tu app habla con Pan API, Pan planifica la mejor estrategia, y ejecuta automaticamente en blockchain.
+</Tip>
 
 ## Planes y Precios
 

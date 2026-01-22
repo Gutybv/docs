@@ -128,21 +128,29 @@ This guide will walk you through your first API call to Pan. By the end, you'll 
     ```json Success response
     {
       "walletId": "wallet_abc123",
-      "balances": {
-        "ethereum-sepolia": [
-          {
-            "symbol": "USDC",
-            "balance": "1000000000",
-            "balanceFormatted": "1000.0",
-            "decimals": 6,
-            "usdValue": 1000.00
-          }
-        ],
-        "base-sepolia": [],
-        "arbitrum-sepolia": []
-      },
-      "totalUsdValue": 1000.00,
-      "updatedAt": "2024-01-15T10:35:00Z"
+      "chains": [
+        {
+          "chain": "ethereum-sepolia",
+          "tokens": [
+            {
+              "asset": "USDC",
+              "balance": "1000000000",
+              "balanceFormatted": "1000.0",
+              "decimals": 6,
+              "valueUsd": 1000.00
+            }
+          ]
+        },
+        {
+          "chain": "base-sepolia",
+          "tokens": []
+        },
+        {
+          "chain": "arbitrum-sepolia",
+          "tokens": []
+        }
+      ],
+      "totalValueUsd": 1000.00
     }
     ```
     </ResponseExample>

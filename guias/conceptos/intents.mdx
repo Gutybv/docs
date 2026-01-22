@@ -36,6 +36,41 @@ El sistema de Pan automaticamente:
 3. Genera un plan de ejecucion optimizado
 4. Ejecuta el plan de forma segura
 
+```mermaid
+sequenceDiagram
+    actor Dev as Tu App
+    participant API as Pan API
+    participant Planner as Intent Planner
+    participant Engine as Execution Engine
+    participant Chain as Blockchain
+
+    Dev->>API: POST /intents {lend, 1000 USDC}
+    API->>Planner: Planificar intent
+
+    rect rgb(255, 243, 224)
+        note right of Planner: Fase de Planificacion
+        Planner->>Chain: Consultar balances
+        Chain-->>Planner: 500 ARB, 500 Base
+        Planner->>Chain: Consultar APYs
+        Chain-->>Planner: Base 8.5%, ARB 7.2%
+        Planner->>Planner: Generar plan optimo
+    end
+
+    Planner-->>API: Plan: bridge + deposit
+
+    rect rgb(232, 245, 233)
+        note right of Engine: Fase de Ejecucion
+        API->>Engine: Ejecutar plan
+        Engine->>Chain: Bridge ARB → Base
+        Chain-->>Engine: txHash 0x123...
+        Engine->>Chain: Deposit en Aave
+        Chain-->>Engine: txHash 0x456...
+    end
+
+    Engine-->>API: Resultados + gas costs
+    API-->>Dev: Intent completado ✓
+```
+
 ## Tipos de Intent
 
 ### Lend (Prestar)
@@ -162,16 +197,45 @@ curl -X POST https://api.pan.dev/v1/intents \
 
 Los intents pasan por estados bien definidos:
 
-```
-┌─────────┐     ┌──────────┐     ┌───────────┐     ┌───────────┐
-│ pending │ --> │ planning │ --> │ executing │ --> │ completed │
-└─────────┘     └──────────┘     └───────────┘     └───────────┘
-                                       │
-                                       │ (si hay error)
-                                       ▼
-                                 ┌──────────┐
-                                 │  failed  │
-                                 └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> pending: createIntent()
+
+    pending --> planning: Validacion OK
+    planning --> executing: Plan generado
+    executing --> completed: Todos los pasos OK
+    executing --> failed: Error en paso
+
+    planning --> failed: Error en planificacion
+
+    completed --> [*]
+    failed --> [*]
+
+    note right of pending
+        Intent creado
+        y validado
+    end note
+
+    note right of planning
+        Analizando balances
+        Consultando yields
+        Generando plan
+    end note
+
+    note right of executing
+        Ejecutando pasos:
+        bridges, deposits
+    end note
+
+    note right of completed
+        Todas las txns
+        confirmadas
+    end note
+
+    note right of failed
+        Error registrado
+        Fondos seguros
+    end note
 ```
 
 <Steps>
@@ -350,6 +414,35 @@ def esperar_intent(intent_id):
 ## Estrategias de Ejecucion
 
 Pan determina automaticamente la mejor estrategia basandose en el estado del wallet:
+
+```mermaid
+flowchart TD
+    Start([Intent: Lend 1000 USDC]) --> Analyze[Analizar wallet]
+    Analyze --> GetYields[Obtener APYs]
+    GetYields --> BestChain{Mejor chain?}
+
+    BestChain --> CheckFunds{Fondos en<br/>mejor chain?}
+
+    CheckFunds -->|Si, suficientes| NoBridge["no-bridge<br/>Deposito directo"]
+    CheckFunds -->|No| CheckOther{Fondos en<br/>otra chain?}
+
+    CheckOther -->|Una chain| SingleBridge["single-bridge<br/>1 bridge + deposit"]
+    CheckOther -->|Multiples chains| MultiBridge["multi-bridge<br/>N bridges + deposit"]
+    CheckOther -->|Ninguna| Insufficient["insufficient<br/>Error: fondos insuficientes"]
+
+    NoBridge --> Execute[Ejecutar plan]
+    SingleBridge --> Execute
+    MultiBridge --> Execute
+    Insufficient --> Fail([Intent Failed])
+    Execute --> Success([Intent Completed])
+
+    style Start fill:#e3f2fd,stroke:#1976d2
+    style Success fill:#c8e6c9,stroke:#388e3c
+    style Fail fill:#ffcdd2,stroke:#c62828
+    style NoBridge fill:#fff9c4,stroke:#f9a825
+    style SingleBridge fill:#ffe0b2,stroke:#ef6c00
+    style MultiBridge fill:#ffccbc,stroke:#e64a19
+```
 
 ### no-bridge
 

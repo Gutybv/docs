@@ -7,45 +7,55 @@ Pan API esta construida alrededor de tres conceptos fundamentales que trabajan j
 
 ## Arquitectura de Alto Nivel
 
+```mermaid
+flowchart TB
+    subgraph App["Tu Aplicacion"]
+        SDK["SDK / REST Client"]
+    end
+
+    subgraph Pan["Pan API"]
+        direction TB
+        subgraph Services["Servicios"]
+            WS["Wallets<br/>Service"]
+            IS["Intents<br/>Service"]
+            YS["Yields<br/>Service"]
+        end
+
+        IP["Intent Planner<br/>Analiza balances, yields y genera plan"]
+        EE["Execution Engine<br/>Ejecuta bridges, swaps, deposits"]
+
+        Services --> IP
+        IP --> EE
+    end
+
+    subgraph Blockchain["Blockchains"]
+        direction TB
+        subgraph Chains["Chains Soportadas"]
+            ETH["Ethereum"]
+            ARB["Arbitrum"]
+            BASE["Base"]
+        end
+
+        subgraph Protocols["Protocolos DeFi"]
+            AAVE["Aave"]
+            ACROSS["Across Bridge"]
+            UNI["Uniswap"]
+        end
+    end
+
+    App --> Pan
+    Pan --> Blockchain
+
+    style App fill:#e3f2fd,stroke:#1976d2
+    style Pan fill:#fff3e0,stroke:#f57c00
+    style Blockchain fill:#e8f5e9,stroke:#388e3c
+    style IP fill:#fce4ec,stroke:#c2185b
+    style EE fill:#f3e5f5,stroke:#7b1fa2
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Tu Aplicacion                            │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         Pan API                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │   Wallets    │  │   Intents    │  │   Yields     │          │
-│  │   Service    │  │   Service    │  │   Service    │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│         │                 │                 │                   │
-│         ▼                 ▼                 ▼                   │
-│  ┌──────────────────────────────────────────────────┐          │
-│  │              Intent Planner                       │          │
-│  │   (Analiza balances, yields, y genera plan)       │          │
-│  └──────────────────────────────────────────────────┘          │
-│                           │                                     │
-│                           ▼                                     │
-│  ┌──────────────────────────────────────────────────┐          │
-│  │              Execution Engine                     │          │
-│  │   (Ejecuta bridges, swaps, deposits)              │          │
-│  └──────────────────────────────────────────────────┘          │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Blockchains                                 │
-│   ┌──────────┐    ┌──────────┐    ┌──────────┐                 │
-│   │ Ethereum │    │ Arbitrum │    │   Base   │                 │
-│   └──────────┘    └──────────┘    └──────────┘                 │
-│                                                                  │
-│   ┌──────────────────────────────────────────────┐             │
-│   │             Protocolos DeFi                   │             │
-│   │   Aave  │  Across Bridge  │  Uniswap         │             │
-│   └──────────────────────────────────────────────┘             │
-└─────────────────────────────────────────────────────────────────┘
-```
+
+<Tip>
+  **Diagrama interactivo**: Los diagramas Mermaid se renderizan automaticamente en tu navegador.
+</Tip>
 
 ## Los Tres Pilares
 
@@ -195,28 +205,94 @@ Pan API esta construida alrededor de tres conceptos fundamentales que trabajan j
 
 ## Modelo de Datos
 
-Pan usa un modelo de datos jerarquico:
+Pan usa un modelo de datos jerarquico que conecta desarrolladores, wallets, e intents:
 
+```mermaid
+erDiagram
+    DEVELOPER ||--o{ API_KEY : tiene
+    DEVELOPER ||--o{ WALLET : crea
+    WALLET ||--o{ INTENT : ejecuta
+    WALLET ||--o{ BALANCE : contiene
+
+    DEVELOPER {
+        string id PK
+        string email
+        string plan
+        timestamp created_at
+    }
+
+    API_KEY {
+        string key PK
+        string developer_id FK
+        string environment
+        boolean active
+    }
+
+    WALLET {
+        string id PK
+        string developer_id FK
+        string user_id
+        string address
+        string chain_type
+    }
+
+    BALANCE {
+        string wallet_id FK
+        string chain
+        string token
+        number amount
+        number usd_value
+    }
+
+    INTENT {
+        string id PK
+        string wallet_id FK
+        string action
+        string status
+        json execution_plan
+        json results
+    }
 ```
-Developer Account (tu cuenta)
-├── API Keys (para autenticacion)
-│   ├── pan_sk_dev_...  (desarrollo)
-│   └── pan_sk_prod_... (produccion)
-│
-└── Wallets (tus usuarios)
-    ├── wallet_abc123 (Usuario A)
-    │   ├── Balances
-    │   │   ├── Ethereum: 200 USDC
-    │   │   ├── Arbitrum: 500 USDC
-    │   │   └── Base: 300 USDC
-    │   │
-    │   └── Intents
-    │       ├── intent_001 (lend, completed)
-    │       └── intent_002 (withdraw, executing)
-    │
-    └── wallet_def456 (Usuario B)
-        ├── Balances
-        └── Intents
+
+### Jerarquia Visual
+
+```mermaid
+graph TB
+    subgraph Dev["Developer Account"]
+        direction TB
+        Keys["API Keys"]
+        Key1["pan_sk_dev_... (desarrollo)"]
+        Key2["pan_sk_prod_... (produccion)"]
+        Keys --> Key1
+        Keys --> Key2
+    end
+
+    subgraph Wallets["Wallets"]
+        direction TB
+        W1["wallet_abc123<br/>Usuario A"]
+        W2["wallet_def456<br/>Usuario B"]
+
+        subgraph W1B["Balances"]
+            B1["ETH: 200 USDC"]
+            B2["ARB: 500 USDC"]
+            B3["Base: 300 USDC"]
+        end
+
+        subgraph W1I["Intents"]
+            I1["intent_001<br/>lend ✓"]
+            I2["intent_002<br/>withdraw ⏳"]
+        end
+
+        W1 --> W1B
+        W1 --> W1I
+    end
+
+    Dev --> Wallets
+
+    style Dev fill:#e8eaf6,stroke:#3f51b5
+    style Wallets fill:#e3f2fd,stroke:#1976d2
+    style W1B fill:#e8f5e9,stroke:#388e3c
+    style W1I fill:#fff3e0,stroke:#f57c00
 ```
 
 ### Desarrolladores y API Keys

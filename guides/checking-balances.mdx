@@ -26,7 +26,7 @@ const response = await fetch(
 );
 
 const balances = await response.json();
-console.log('Total USD value:', balances.totalUsdValue);
+console.log('Total USD value:', balances.totalValueUsd);
 ```
 </CodeGroup>
 
@@ -34,36 +34,44 @@ console.log('Total USD value:', balances.totalUsdValue);
 ```json Balance response
 {
   "walletId": "wallet_abc123",
-  "balances": {
-    "ethereum-sepolia": [
-      {
-        "symbol": "USDC",
-        "balance": "1000000000",
-        "balanceFormatted": "1000.0",
-        "decimals": 6,
-        "usdValue": 1000.0
-      },
-      {
-        "symbol": "WETH",
-        "balance": "500000000000000000",
-        "balanceFormatted": "0.5",
-        "decimals": 18,
-        "usdValue": 1250.0
-      }
-    ],
-    "base-sepolia": [
-      {
-        "symbol": "USDT",
-        "balance": "500000000",
-        "balanceFormatted": "500.0",
-        "decimals": 6,
-        "usdValue": 500.0
-      }
-    ],
-    "arbitrum-sepolia": []
-  },
-  "totalUsdValue": 2750.0,
-  "updatedAt": "2024-01-15T10:35:00Z"
+  "chains": [
+    {
+      "chain": "ethereum-sepolia",
+      "tokens": [
+        {
+          "asset": "USDC",
+          "balance": "1000000000",
+          "balanceFormatted": "1000.0",
+          "decimals": 6,
+          "valueUsd": 1000.0
+        },
+        {
+          "asset": "WETH",
+          "balance": "500000000000000000",
+          "balanceFormatted": "0.5",
+          "decimals": 18,
+          "valueUsd": 1250.0
+        }
+      ]
+    },
+    {
+      "chain": "base-sepolia",
+      "tokens": [
+        {
+          "asset": "USDT",
+          "balance": "500000000",
+          "balanceFormatted": "500.0",
+          "decimals": 6,
+          "valueUsd": 500.0
+        }
+      ]
+    },
+    {
+      "chain": "arbitrum-sepolia",
+      "tokens": []
+    }
+  ],
+  "totalValueUsd": 2750.0
 }
 ```
 </ResponseExample>
@@ -80,7 +88,7 @@ console.log('Total USD value:', balances.totalUsdValue);
   </Accordion>
   
   <Accordion title="USD values">
-    USD values are calculated using real-time price oracles when available. If a token doesn't have USD value data, the `usdValue` field may be `null`.
+    USD values are calculated using real-time price oracles when available. If a token doesn't have USD value data, the `valueUsd` field may be `null`.
   </Accordion>
   
   <Accordion title="Empty chains">
@@ -100,19 +108,19 @@ Here's a practical example of displaying balances in a user interface:
 ```javascript JavaScript
 function formatBalance(token) {
   const value = parseFloat(token.balanceFormatted);
-  const symbol = token.symbol;
-  const usd = token.usdValue ? ` ($${token.usdValue.toFixed(2)})` : '';
-  return `${value} ${symbol}${usd}`;
+  const asset = token.asset;
+  const usd = token.valueUsd ? ` ($${token.valueUsd.toFixed(2)})` : '';
+  return `${value} ${asset}${usd}`;
 }
 
 function displayBalances(balances) {
-  console.log(`Total Portfolio Value: $${balances.totalUsdValue.toFixed(2)}\n`);
-  
-  Object.entries(balances.balances).forEach(([chain, tokens]) => {
-    if (tokens.length === 0) return;
-    
-    console.log(`\n${chain.toUpperCase()}:`);
-    tokens.forEach(token => {
+  console.log(`Total Portfolio Value: $${balances.totalValueUsd.toFixed(2)}\n`);
+
+  balances.chains.forEach(chainData => {
+    if (chainData.tokens.length === 0) return;
+
+    console.log(`\n${chainData.chain.toUpperCase()}:`);
+    chainData.tokens.forEach(token => {
       console.log(`  ${formatBalance(token)}`);
     });
   });
@@ -131,7 +139,7 @@ displayBalances(balances);
     Balance data changes frequently due to transactions. Don't cache balances for too long - refresh every few seconds for active applications.
   </Card>
   <Card title="Handle missing USD values" icon="dollar-sign">
-    Some tokens may not have USD pricing. Always check if `usdValue` exists before displaying it.
+    Some tokens may not have USD pricing. Always check if `valueUsd` exists before displaying it.
   </Card>
   <Card title="Show loading states" icon="spinner">
     Balance queries can take 1-3 seconds. Show loading indicators to users while fetching.
@@ -162,24 +170,24 @@ Process balance data to filter or aggregate:
 // Get all USDC balances across all chains
 function getUSDCBalances(balances) {
   const usdcBalances = [];
-  
-  Object.entries(balances.balances).forEach(([chain, tokens]) => {
-    const usdc = tokens.find(t => t.symbol === 'USDC');
+
+  balances.chains.forEach(chainData => {
+    const usdc = chainData.tokens.find(t => t.asset === 'USDC');
     if (usdc) {
       usdcBalances.push({
-        chain,
+        chain: chainData.chain,
         ...usdc
       });
     }
   });
-  
+
   return usdcBalances;
 }
 
 // Calculate total USDC value across all chains
 function getTotalUSDC(balances) {
   return getUSDCBalances(balances)
-    .reduce((sum, token) => sum + (token.usdValue || 0), 0);
+    .reduce((sum, token) => sum + (token.valueUsd || 0), 0);
 }
 
 // Usage
@@ -194,41 +202,40 @@ console.log(`Total USDC: $${totalUSDC.toFixed(2)}`);
 <AccordionGroup>
   <Accordion title="Portfolio overview">
     Display total portfolio value and breakdown by chain:
-    
+
     ```javascript
-    const totalValue = balances.totalUsdValue;
-    const byChain = Object.keys(balances.balances)
-      .map(chain => ({
-        chain,
-        value: balances.balances[chain]
-          .reduce((sum, t) => sum + (t.usdValue || 0), 0)
-      }));
+    const totalValue = balances.totalValueUsd;
+    const byChain = balances.chains.map(chainData => ({
+      chain: chainData.chain,
+      value: chainData.tokens.reduce((sum, t) => sum + (t.valueUsd || 0), 0)
+    }));
     ```
   </Accordion>
-  
+
   <Accordion title="Sufficient funds check">
     Check if a wallet has enough of a specific token before creating an intent:
-    
+
     ```javascript
-    function hasSufficientFunds(balances, token, chain, amount) {
-      const chainBalances = balances.balances[chain] || [];
-      const tokenBalance = chainBalances.find(t => t.symbol === token);
-      
+    function hasSufficientFunds(balances, asset, chain, amount) {
+      const chainData = balances.chains.find(c => c.chain === chain);
+      if (!chainData) return false;
+
+      const tokenBalance = chainData.tokens.find(t => t.asset === asset);
       if (!tokenBalance) return false;
-      
+
       return parseFloat(tokenBalance.balanceFormatted) >= parseFloat(amount);
     }
     ```
   </Accordion>
-  
+
   <Accordion title="Token discovery">
     Find which tokens a wallet holds across all chains:
-    
+
     ```javascript
     function getAllTokens(balances) {
       const tokens = new Set();
-      Object.values(balances.balances).forEach(chainTokens => {
-        chainTokens.forEach(token => tokens.add(token.symbol));
+      balances.chains.forEach(chainData => {
+        chainData.tokens.forEach(token => tokens.add(token.asset));
       });
       return Array.from(tokens);
     }

@@ -35,10 +35,28 @@ const intent = await pan.bridge({
   walletId: 'pan_wallet_abc123',
   amount: 500,
   asset: 'USDC',
-  fromChain: 'ethereum',
-  toChain: 'arbitrum'
+  fromChain: 'arbitrum-sepolia',
+  toChain: 'base-sepolia'
 });
 ```
+
+## Crear Intent de Transfer
+
+Transfiere tokens a una direccion externa:
+
+```typescript
+const intent = await pan.transfer({
+  walletId: 'pan_wallet_abc123',
+  to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+  amount: 100,
+  asset: 'USDC',
+  chain: 'arbitrum-sepolia'
+});
+```
+
+<Warning>
+  **Transfer** envia tokens fuera de la wallet Pan. Verifica la direccion destino antes de ejecutar.
+</Warning>
 
 ## Obtener Estado
 
@@ -52,56 +70,85 @@ console.log('Pasos completados:', intent.results?.completedSteps);
 ## Tipos
 
 ```typescript
-interface LendParams {
+// Parametros de entrada
+interface LendIntentParams {
+  walletId: string;
+  amount: number;
+}
+
+interface WithdrawIntentParams {
   walletId: string;
   amount: number;
   asset?: string;
-  chain?: string;
+  chain: string;  // Requerido
 }
 
-interface WithdrawParams {
+interface BridgeIntentParams {
   walletId: string;
   amount: number;
   asset?: string;
-  chain: string;
+  fromChain: string;  // Requerido
+  toChain: string;    // Requerido
 }
 
-interface BridgeParams {
+interface TransferIntentParams {
   walletId: string;
+  to: string;         // Direccion destino
   amount: number;
   asset?: string;
-  fromChain: string;
-  toChain: string;
+  chain: string;      // Requerido
 }
 
+// Respuesta de Intent
 interface Intent {
   id: string;
+  developerId: string;
   walletId: string;
   status: 'pending' | 'planning' | 'executing' | 'completed' | 'failed';
-  action: 'lend' | 'withdraw' | 'bridge';
+  action: 'lend' | 'withdraw' | 'bridge' | 'transfer' | 'swap';
   amount: number;
-  asset: string;
   executionPlan?: ExecutionPlan;
-  results?: IntentResults;
-  error?: IntentError;
+  results?: ExecutionResult[];
+  totalGasUsed?: number;
+  totalGasCostUsd?: number;
+  errorMessage?: string;
   createdAt: string;
+  updatedAt: string;
   completedAt?: string;
 }
 
+// Plan de ejecucion
 interface ExecutionPlan {
-  strategy: string;
-  steps: Step[];
-  estimatedGasUsd: number;
-  estimatedTime: string;
+  strategy: 'direct-deposit' | 'bridge-and-lend' | 'multi-bridge-and-lend' | 'simple-withdraw' | 'bridge-only';
+  steps: ExecutionStep[];
+  estimatedGas?: number;
+  estimatedTime?: number;
+  reasoning: string;
 }
 
-interface IntentResults {
-  completedSteps: number;
-  transactions: Transaction[];
-  totalGasUsed?: string;
-  totalGasCostUsd?: number;
-  finalAmount?: string;
-  apy?: number;
+// Tipos de pasos
+type ExecutionStepType = 'deposit' | 'withdraw' | 'swap' | 'bridge' | 'consolidate';
+
+interface ExecutionStep {
+  type: ExecutionStepType;
+  status?: 'pending' | 'executing' | 'completed' | 'failed';
+}
+
+interface DepositStep extends ExecutionStep {
+  type: 'deposit';
+  protocol: 'aave';
+  asset: string;
+  amount: number;
+  chain: string;
+}
+
+interface BridgeStep extends ExecutionStep {
+  type: 'bridge';
+  fromChain: string;
+  toChain: string;
+  asset: string;
+  amount: number;
+  bridge?: 'across';
 }
 ```
 

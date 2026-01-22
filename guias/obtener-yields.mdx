@@ -11,8 +11,8 @@ Pan agrega tasas de rendimiento (APY) de protocolos DeFi en multiples chains, pe
 ```javascript JavaScript
 const yields = await pan.yields.getAll();
 
-console.log('Mejor APY:', yields.bestYield);
-console.log('Todos los yields:', yields.yields);
+console.log('Mejor APY:', yields.best);
+console.log('Todos los yields:', yields.rates);
 ```
 
 ```python Python
@@ -21,7 +21,7 @@ response = requests.get(
     headers=headers
 )
 yields = response.json()
-print(f"Mejor APY: {yields['bestYield']['apy']}%")
+print(f"Mejor APY: {yields['best']['apy']}%")
 ```
 
 ```bash cURL
@@ -34,92 +34,59 @@ curl -X GET "https://api.pan.dev/v1/yields" \
 
 ```json
 {
-  "yields": [
+  "rates": [
     {
       "chain": "base",
-      "chainId": 8453,
       "protocol": "aave",
-      "protocolVersion": "v3",
       "asset": "USDC",
-      "assetAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-      "apy": 8.52,
-      "apyBase": 3.20,
-      "apyReward": 5.32,
-      "tvl": 15000000,
-      "riskLevel": "low",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "apy": 8.52
     },
     {
       "chain": "arbitrum",
-      "chainId": 42161,
       "protocol": "aave",
-      "protocolVersion": "v3",
       "asset": "USDC",
-      "assetAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-      "apy": 7.23,
-      "apyBase": 2.80,
-      "apyReward": 4.43,
-      "tvl": 25000000,
-      "riskLevel": "low",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "apy": 7.23
     },
     {
       "chain": "ethereum",
-      "chainId": 1,
       "protocol": "aave",
-      "protocolVersion": "v3",
       "asset": "USDC",
-      "assetAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      "apy": 5.15,
-      "apyBase": 2.10,
-      "apyReward": 3.05,
-      "tvl": 50000000,
-      "riskLevel": "low",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "apy": 5.15
     }
   ],
-  "bestYield": {
+  "best": {
     "chain": "base",
-    "protocol": "aave",
     "asset": "USDC",
-    "apy": 8.52
-  },
-  "updatedAt": "2024-01-15T10:30:00Z"
+    "apy": 8.52,
+    "reasoning": "Highest APY available"
+  }
 }
 ```
 
-### Campos de Yield
+### Campos de Rate
 
 | Campo | Tipo | Descripcion |
 |-------|------|-------------|
 | `chain` | string | Nombre de la chain |
-| `chainId` | number | ID numerico de la chain |
 | `protocol` | string | Protocolo DeFi |
-| `protocolVersion` | string | Version del protocolo |
 | `asset` | string | Token soportado |
-| `apy` | number | APY total (base + rewards) |
-| `apyBase` | number | APY base del protocolo |
-| `apyReward` | number | APY de recompensas adicionales |
-| `tvl` | number | Total Value Locked en USD |
-| `riskLevel` | string | Nivel de riesgo: `low`, `medium`, `high` |
+| `apy` | number | APY actual (porcentaje) |
 
 ## Mostrar Yields al Usuario
 
 ```javascript
 async function mostrarOportunidades() {
-  const { yields, bestYield } = await pan.yields.getAll();
+  const { rates, best } = await pan.yields.getAll();
 
   console.log('\n=== Mejores Oportunidades de Rendimiento ===\n');
 
   // Ordenar por APY descendente
-  const ordenados = [...yields].sort((a, b) => b.apy - a.apy);
+  const ordenados = [...rates].sort((a, b) => b.apy - a.apy);
 
   ordenados.forEach((y, i) => {
-    const mejor = y.chain === bestYield.chain ? ' (MEJOR)' : '';
+    const mejor = y.chain === best.chain ? ' (MEJOR)' : '';
     console.log(`${i + 1}. ${y.chain} - ${y.protocol}`);
     console.log(`   APY: ${y.apy.toFixed(2)}%${mejor}`);
-    console.log(`   TVL: $${(y.tvl / 1000000).toFixed(1)}M`);
-    console.log(`   Riesgo: ${y.riskLevel}`);
     console.log('');
   });
 }
@@ -130,18 +97,20 @@ async function mostrarOportunidades() {
 ```javascript
 async function analizarMejorOpcion(walletId, amount) {
   // 1. Obtener balances y yields
-  const [{ balances }, { yields, bestYield }] = await Promise.all([
+  const [balancesResponse, yieldsResponse] = await Promise.all([
     pan.wallet.getBalances(walletId),
     pan.yields.getAll()
   ]);
 
+  const { rates, best } = yieldsResponse;
+
   // 2. Encontrar donde estan los fondos
   const fuentes = [];
-  for (const [chain, tokens] of Object.entries(balances)) {
-    const usdc = tokens.find(t => t.symbol === 'USDC');
+  for (const chainData of balancesResponse.chains) {
+    const usdc = chainData.tokens.find(t => t.asset === 'USDC');
     if (usdc && parseFloat(usdc.balanceFormatted) > 0) {
       fuentes.push({
-        chain,
+        chain: chainData.chain,
         balance: parseFloat(usdc.balanceFormatted)
       });
     }
@@ -152,7 +121,7 @@ async function analizarMejorOpcion(walletId, amount) {
 
   // Opcion A: Depositar donde estan los fondos (sin bridge)
   for (const fuente of fuentes) {
-    const yieldLocal = yields.find(y => y.chain === fuente.chain);
+    const yieldLocal = rates.find(y => y.chain === fuente.chain);
     if (yieldLocal) {
       const gananciaAnual = fuente.balance * (yieldLocal.apy / 100);
       console.log(`Sin bridge (${fuente.chain}):`);
@@ -163,14 +132,14 @@ async function analizarMejorOpcion(walletId, amount) {
   }
 
   // Opcion B: Bridge al mejor APY
-  const gananciaOptima = amount * (bestYield.apy / 100);
-  console.log(`Con bridge a ${bestYield.chain}:`);
-  console.log(`  APY: ${bestYield.apy}%`);
+  const gananciaOptima = amount * (best.apy / 100);
+  console.log(`Con bridge a ${best.chain}:`);
+  console.log(`  APY: ${best.apy}%`);
   console.log(`  Ganancia anual estimada: $${gananciaOptima.toFixed(2)}`);
 
   // 4. Calcular si vale la pena el bridge
-  const apyLocal = yields.find(y => fuentes.some(f => f.chain === y.chain))?.apy || 0;
-  const diferenciaApy = bestYield.apy - apyLocal;
+  const apyLocal = rates.find(y => fuentes.some(f => f.chain === y.chain))?.apy || 0;
+  const diferenciaApy = best.apy - apyLocal;
   const gananciaExtraAnual = amount * (diferenciaApy / 100);
 
   // Asumir costo de bridge ~$3
@@ -183,8 +152,8 @@ async function analizarMejorOpcion(walletId, amount) {
   console.log(`  Dias para recuperar costo de bridge: ${diasParaRecuperar.toFixed(0)}`);
 
   if (diasParaRecuperar < 30) {
-    console.log(`  Recomendacion: Bridge a ${bestYield.chain}`);
-    return { action: 'bridge', target: bestYield.chain };
+    console.log(`  Recomendacion: Bridge a ${best.chain}`);
+    return { action: 'bridge', target: best.chain };
   } else {
     console.log(`  Recomendacion: Depositar localmente`);
     return { action: 'local', target: fuentes[0]?.chain };
@@ -218,8 +187,8 @@ function YieldsTable() {
 
       <div className="best-yield">
         <span>Mejor APY:</span>
-        <span className="apy">{yields.bestYield.apy.toFixed(2)}%</span>
-        <span className="chain">en {yields.bestYield.chain}</span>
+        <span className="apy">{yields.best.apy.toFixed(2)}%</span>
+        <span className="chain">en {yields.best.chain}</span>
       </div>
 
       <table>
@@ -228,17 +197,15 @@ function YieldsTable() {
             <th>Chain</th>
             <th>Protocolo</th>
             <th>APY</th>
-            <th>TVL</th>
-            <th>Riesgo</th>
           </tr>
         </thead>
         <tbody>
-          {yields.yields
+          {yields.rates
             .sort((a, b) => b.apy - a.apy)
             .map((y) => (
               <tr
                 key={`${y.chain}-${y.protocol}`}
-                className={y.chain === yields.bestYield.chain ? 'best' : ''}
+                className={y.chain === yields.best.chain ? 'best' : ''}
               >
                 <td>
                   <ChainIcon chain={y.chain} />
@@ -250,23 +217,11 @@ function YieldsTable() {
                 </td>
                 <td className="apy">
                   {y.apy.toFixed(2)}%
-                  <div className="breakdown">
-                    <span>Base: {y.apyBase.toFixed(2)}%</span>
-                    <span>Reward: {y.apyReward.toFixed(2)}%</span>
-                  </div>
-                </td>
-                <td>${(y.tvl / 1000000).toFixed(1)}M</td>
-                <td>
-                  <RiskBadge level={y.riskLevel} />
                 </td>
               </tr>
             ))}
         </tbody>
       </table>
-
-      <div className="updated">
-        Actualizado: {new Date(yields.updatedAt).toLocaleString()}
-      </div>
     </div>
   );
 }
@@ -333,33 +288,33 @@ class YieldMonitor {
   }
 
   async check() {
-    const { bestYield } = await pan.yields.getAll();
+    const { best } = await pan.yields.getAll();
 
     const alerts = [];
 
     // Alerta si APY supera umbral
-    if (bestYield.apy >= this.minApy) {
+    if (best.apy >= this.minApy) {
       alerts.push({
         type: 'high_apy',
-        message: `APY de ${bestYield.apy}% disponible en ${bestYield.chain}`,
-        yield: bestYield
+        message: `APY de ${best.apy}% disponible en ${best.chain}`,
+        yield: best
       });
     }
 
     // Alerta si APY cambio significativamente
     if (this.lastBestApy) {
-      const cambio = bestYield.apy - this.lastBestApy;
+      const cambio = best.apy - this.lastBestApy;
       if (Math.abs(cambio) > 1) {
         alerts.push({
           type: 'apy_change',
           message: `APY ${cambio > 0 ? 'subio' : 'bajo'} ${Math.abs(cambio).toFixed(2)}%`,
           from: this.lastBestApy,
-          to: bestYield.apy
+          to: best.apy
         });
       }
     }
 
-    this.lastBestApy = bestYield.apy;
+    this.lastBestApy = best.apy;
     return alerts;
   }
 

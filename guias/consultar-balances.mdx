@@ -11,8 +11,8 @@ Esta guia te muestra como consultar balances de wallets, interpretar la respuest
 ```javascript JavaScript
 const balances = await pan.wallet.getBalances('pan_wallet_abc123');
 
-console.log('Total USD:', balances.totalUsdValue);
-console.log('Balances:', balances.balances);
+console.log('Total USD:', balances.totalValueUsd);
+console.log('Chains:', balances.chains);
 ```
 
 ```python Python
@@ -21,7 +21,7 @@ response = requests.get(
     headers=headers
 )
 balances = response.json()
-print(f"Total: ${balances['totalUsdValue']}")
+print(f"Total: ${balances['totalValueUsd']}")
 ```
 
 ```bash cURL
@@ -36,39 +36,44 @@ curl -X GET "https://api.pan.dev/v1/balances/pan_wallet_abc123" \
 {
   "walletId": "pan_wallet_abc123",
   "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-  "balances": {
-    "ethereum": [
-      {
-        "symbol": "USDC",
-        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        "balance": "200000000",
-        "balanceFormatted": "200.00",
-        "decimals": 6,
-        "usdValue": 200.00
-      },
-      {
-        "symbol": "ETH",
-        "address": "0x0000000000000000000000000000000000000000",
-        "balance": "500000000000000000",
-        "balanceFormatted": "0.50",
-        "decimals": 18,
-        "usdValue": 1250.00
-      }
-    ],
-    "arbitrum": [
-      {
-        "symbol": "USDC",
-        "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-        "balance": "500000000",
-        "balanceFormatted": "500.00",
-        "decimals": 6,
-        "usdValue": 500.00
-      }
-    ],
-    "base": []
-  },
-  "totalUsdValue": 1950.00,
-  "updatedAt": "2024-01-15T10:35:00Z"
+  "chains": [
+    {
+      "chain": "ethereum",
+      "tokens": [
+        {
+          "asset": "USDC",
+          "balance": "200000000",
+          "balanceFormatted": "200.00",
+          "decimals": 6,
+          "valueUsd": 200.00
+        },
+        {
+          "asset": "ETH",
+          "balance": "500000000000000000",
+          "balanceFormatted": "0.50",
+          "decimals": 18,
+          "valueUsd": 1250.00
+        }
+      ]
+    },
+    {
+      "chain": "arbitrum",
+      "tokens": [
+        {
+          "asset": "USDC",
+          "balance": "500000000",
+          "balanceFormatted": "500.00",
+          "decimals": 6,
+          "valueUsd": 500.00
+        }
+      ]
+    },
+    {
+      "chain": "base",
+      "tokens": []
+    }
+  ],
+  "totalValueUsd": 1950.00
 }
 ```
 
@@ -76,12 +81,11 @@ curl -X GET "https://api.pan.dev/v1/balances/pan_wallet_abc123" \
 
 | Campo | Tipo | Descripcion |
 |-------|------|-------------|
-| `symbol` | string | Simbolo del token (USDC, ETH) |
-| `address` | string | Direccion del contrato |
+| `asset` | string | Simbolo del token (USDC, ETH) |
 | `balance` | string | Balance en unidades minimas |
 | `balanceFormatted` | string | Balance con decimales |
 | `decimals` | number | Decimales del token |
-| `usdValue` | number | Valor en USD |
+| `valueUsd` | number | Valor en USD |
 
 ## Formatear para UI
 
@@ -89,31 +93,30 @@ curl -X GET "https://api.pan.dev/v1/balances/pan_wallet_abc123" \
 function formatearBalances(response) {
   const items = [];
 
-  for (const [chain, tokens] of Object.entries(response.balances)) {
-    for (const token of tokens) {
+  for (const chainData of response.chains) {
+    for (const token of chainData.tokens) {
       // Ignorar balances cero
       if (parseFloat(token.balanceFormatted) === 0) continue;
 
       items.push({
-        chain: formatearNombreChain(chain),
-        chainId: chain,
-        token: token.symbol,
+        chain: formatearNombreChain(chainData.chain),
+        chainId: chainData.chain,
+        token: token.asset,
         amount: formatearNumero(token.balanceFormatted),
-        usd: formatearMoneda(token.usdValue),
-        icon: getTokenIcon(token.symbol),
-        explorerUrl: getExplorerUrl(chain, response.address)
+        usd: formatearMoneda(token.valueUsd),
+        icon: getTokenIcon(token.asset),
+        explorerUrl: getExplorerUrl(chainData.chain, response.address)
       });
     }
   }
 
   // Ordenar por valor USD descendente
-  items.sort((a, b) => b.usdValue - a.usdValue);
+  items.sort((a, b) => b.usd - a.usd);
 
   return {
     address: response.address,
     items,
-    total: formatearMoneda(response.totalUsdValue),
-    updatedAt: new Date(response.updatedAt).toLocaleString()
+    total: formatearMoneda(response.totalValueUsd)
   };
 }
 
@@ -148,16 +151,16 @@ function formatearMoneda(valor) {
 ## Calcular Total por Asset
 
 ```javascript
-function calcularTotalesPorAsset(balances) {
+function calcularTotalesPorAsset(chains) {
   const totales = {};
 
-  for (const [chain, tokens] of Object.entries(balances)) {
-    for (const token of tokens) {
-      const symbol = token.symbol;
+  for (const chainData of chains) {
+    for (const token of chainData.tokens) {
+      const asset = token.asset;
 
-      if (!totales[symbol]) {
-        totales[symbol] = {
-          symbol,
+      if (!totales[asset]) {
+        totales[asset] = {
+          asset,
           totalBalance: 0,
           totalUsd: 0,
           chains: []
@@ -165,12 +168,12 @@ function calcularTotalesPorAsset(balances) {
       }
 
       const balance = parseFloat(token.balanceFormatted);
-      totales[symbol].totalBalance += balance;
-      totales[symbol].totalUsd += token.usdValue;
-      totales[symbol].chains.push({
-        chain,
+      totales[asset].totalBalance += balance;
+      totales[asset].totalUsd += token.valueUsd;
+      totales[asset].chains.push({
+        chain: chainData.chain,
         balance,
-        usd: token.usdValue
+        usd: token.valueUsd
       });
     }
   }
@@ -179,29 +182,29 @@ function calcularTotalesPorAsset(balances) {
 }
 
 // Uso
-const { balances } = await pan.wallet.getBalances(walletId);
-const porAsset = calcularTotalesPorAsset(balances);
+const response = await pan.wallet.getBalances(walletId);
+const porAsset = calcularTotalesPorAsset(response.chains);
 
-console.log('USDC total:', porAsset.find(a => a.symbol === 'USDC'));
-// { symbol: 'USDC', totalBalance: 1000, totalUsd: 1000, chains: [...] }
+console.log('USDC total:', porAsset.find(a => a.asset === 'USDC'));
+// { asset: 'USDC', totalBalance: 1000, totalUsd: 1000, chains: [...] }
 ```
 
 ## Verificar Fondos Suficientes
 
 ```javascript
 async function verificarFondos(walletId, asset, cantidadRequerida) {
-  const { balances } = await pan.wallet.getBalances(walletId);
+  const response = await pan.wallet.getBalances(walletId);
 
   let disponible = 0;
   const fuentes = [];
 
-  for (const [chain, tokens] of Object.entries(balances)) {
-    const token = tokens.find(t => t.symbol === asset);
+  for (const chainData of response.chains) {
+    const token = chainData.tokens.find(t => t.asset === asset);
     if (token) {
       const balance = parseFloat(token.balanceFormatted);
       disponible += balance;
       if (balance > 0) {
-        fuentes.push({ chain, balance });
+        fuentes.push({ chain: chainData.chain, balance });
       }
     }
   }
@@ -216,7 +219,7 @@ async function verificarFondos(walletId, asset, cantidadRequerida) {
 }
 
 // Uso
-const check = await verificarFondos('wallet_123', 'USDC', 1000);
+const check = await verificarFondos('pan_wallet_abc123', 'USDC', 1000);
 
 if (!check.suficiente) {
   console.log(`Faltan ${check.faltante} USDC`);
@@ -354,8 +357,8 @@ function useBalances(walletId, { autoRefresh = false, interval = 30000 } = {}) {
     if (!balances) return 0;
 
     let total = 0;
-    for (const tokens of Object.values(balances.balances)) {
-      const token = tokens.find(t => t.symbol === asset);
+    for (const chainData of balances.chains) {
+      const token = chainData.tokens.find(t => t.asset === asset);
       if (token) total += parseFloat(token.balanceFormatted);
     }
     return total;
@@ -372,7 +375,7 @@ function useBalances(walletId, { autoRefresh = false, interval = 30000 } = {}) {
     refresh: fetch,
     getTotal,
     hasFunds,
-    totalUsd: balances?.totalUsdValue || 0
+    totalUsd: balances?.totalValueUsd || 0
   };
 }
 
@@ -416,7 +419,7 @@ class BalanceWatcher {
     const balances = await pan.wallet.getBalances(this.walletId);
 
     // Crear hash simple de balances
-    const hash = JSON.stringify(balances.balances);
+    const hash = JSON.stringify(balances.chains);
 
     // Solo notificar si cambio
     if (hash !== this.lastHash) {
@@ -439,8 +442,8 @@ class BalanceWatcher {
 }
 
 // Uso
-const watcher = new BalanceWatcher('wallet_123', (balances) => {
-  console.log('Balances actualizados:', balances.totalUsdValue);
+const watcher = new BalanceWatcher('pan_wallet_abc123', (balances) => {
+  console.log('Balances actualizados:', balances.totalValueUsd);
   actualizarUI(balances);
 });
 

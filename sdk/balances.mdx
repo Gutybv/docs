@@ -8,41 +8,48 @@ description: "Consultar balances con el SDK"
 ```typescript
 const balances = await pan.wallet.getBalances('pan_wallet_abc123');
 
-console.log('Total USD:', balances.totalUsdValue);
+console.log('Total USD:', balances.totalValueUsd);
 console.log('Address:', balances.address);
 ```
 
 ## Estructura de Respuesta
 
 ```typescript
-interface Balances {
+interface WalletBalances {
   walletId: string;
   address: string;
-  balances: Record<string, TokenBalance[]>;
-  totalUsdValue: number;
-  updatedAt: string;
+  chains: ChainBalance[];
+  totalValueUsd?: number;
+}
+
+interface ChainBalance {
+  chain: string;
+  tokens: TokenBalance[];
 }
 
 interface TokenBalance {
-  symbol: string;
-  address: string;
+  asset: string;            // Simbolo (USDC, WETH)
   balance: string;          // En unidades minimas
   balanceFormatted: string; // Con decimales
   decimals: number;
-  usdValue: number;
+  valueUsd?: number;
 }
 ```
+
+<Note>
+  **Estructura de datos**: Los balances se organizan por chain en un array `chains`, donde cada chain contiene sus `tokens`.
+</Note>
 
 ## Iterar Balances
 
 ```typescript
-const { balances } = await pan.wallet.getBalances(walletId);
+const balances = await pan.wallet.getBalances(walletId);
 
-for (const [chain, tokens] of Object.entries(balances)) {
-  console.log(`\n${chain}:`);
-  for (const token of tokens) {
+for (const chainBalance of balances.chains) {
+  console.log(`\n${chainBalance.chain}:`);
+  for (const token of chainBalance.tokens) {
     if (parseFloat(token.balanceFormatted) > 0) {
-      console.log(`  ${token.balanceFormatted} ${token.symbol} ($${token.usdValue})`);
+      console.log(`  ${token.balanceFormatted} ${token.asset} ($${token.valueUsd || 0})`);
     }
   }
 }
@@ -53,11 +60,11 @@ for (const [chain, tokens] of Object.entries(balances)) {
 ### Total de un Asset
 
 ```typescript
-function getAssetTotal(balances: Balances, symbol: string): number {
+function getAssetTotal(balances: WalletBalances, asset: string): number {
   let total = 0;
 
-  for (const tokens of Object.values(balances.balances)) {
-    const token = tokens.find(t => t.symbol === symbol);
+  for (const chainBalance of balances.chains) {
+    const token = chainBalance.tokens.find(t => t.asset === asset);
     if (token) {
       total += parseFloat(token.balanceFormatted);
     }
@@ -72,26 +79,26 @@ const totalUsdc = getAssetTotal(balances, 'USDC');
 ### Balances por Asset
 
 ```typescript
-function getBalancesByAsset(balances: Balances): Record<string, {
+function getBalancesByAsset(balances: WalletBalances): Record<string, {
   total: number;
   totalUsd: number;
   chains: { chain: string; amount: number; usd: number }[];
 }> {
   const result: Record<string, any> = {};
 
-  for (const [chain, tokens] of Object.entries(balances.balances)) {
-    for (const token of tokens) {
-      if (!result[token.symbol]) {
-        result[token.symbol] = { total: 0, totalUsd: 0, chains: [] };
+  for (const chainBalance of balances.chains) {
+    for (const token of chainBalance.tokens) {
+      if (!result[token.asset]) {
+        result[token.asset] = { total: 0, totalUsd: 0, chains: [] };
       }
 
       const amount = parseFloat(token.balanceFormatted);
-      result[token.symbol].total += amount;
-      result[token.symbol].totalUsd += token.usdValue;
-      result[token.symbol].chains.push({
-        chain,
+      result[token.asset].total += amount;
+      result[token.asset].totalUsd += token.valueUsd || 0;
+      result[token.asset].chains.push({
+        chain: chainBalance.chain,
         amount,
-        usd: token.usdValue
+        usd: token.valueUsd || 0
       });
     }
   }
@@ -103,8 +110,8 @@ function getBalancesByAsset(balances: Balances): Record<string, {
 ### Verificar Fondos
 
 ```typescript
-function hasFunds(balances: Balances, symbol: string, required: number): boolean {
-  return getAssetTotal(balances, symbol) >= required;
+function hasFunds(balances: WalletBalances, asset: string, required: number): boolean {
+  return getAssetTotal(balances, asset) >= required;
 }
 
 if (!hasFunds(balances, 'USDC', 1000)) {
@@ -166,7 +173,7 @@ export function useBalances(walletId: string, options: UseBalancesOptions = {}) 
     error,
     refresh: fetch,
     getTotal,
-    totalUsd: balances?.totalUsdValue || 0
+    totalUsd: balances?.totalValueUsd || 0
   };
 }
 ```

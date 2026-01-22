@@ -71,11 +71,11 @@ async function ejecutarLending(walletId, amount) {
 
   // 1. Verificar balances primero
   const balances = await pan.wallet.getBalances(walletId);
-  console.log(`Balance total: $${balances.totalUsdValue}`);
+  console.log(`Balance total: $${balances.totalValueUsd}`);
 
   // 2. Verificar yields disponibles
   const yields = await pan.yields.getAll();
-  console.log(`Mejor APY: ${yields.bestYield.apy}% en ${yields.bestYield.chain}`);
+  console.log(`Mejor APY: ${yields.best.apy}% en ${yields.best.chain}`);
 
   // 3. Crear intent
   const intent = await pan.lend({
@@ -175,12 +175,12 @@ Siempre verifica que hay fondos suficientes:
 ```javascript
 async function verificarYEjecutar(walletId, amount, asset = 'USDC') {
   // 1. Obtener balances
-  const { balances, totalUsdValue } = await pan.wallet.getBalances(walletId);
+  const response = await pan.wallet.getBalances(walletId);
 
   // 2. Calcular total del asset
   let totalAsset = 0;
-  for (const [chain, tokens] of Object.entries(balances)) {
-    const token = tokens.find(t => t.symbol === asset);
+  for (const chainData of response.chains) {
+    const token = chainData.tokens.find(t => t.asset === asset);
     if (token) {
       totalAsset += parseFloat(token.balanceFormatted);
     }
@@ -197,12 +197,12 @@ async function verificarYEjecutar(walletId, amount, asset = 'USDC') {
   }
 
   // 4. Obtener mejor yield
-  const { bestYield } = await pan.yields.getAll();
-  console.log(`Mejor APY: ${bestYield.apy}% en ${bestYield.chain}`);
+  const yields = await pan.yields.getAll();
+  console.log(`Mejor APY: ${yields.best.apy}% en ${yields.best.chain}`);
 
   // 5. Confirmar con usuario (opcional)
   const confirmar = await preguntarUsuario(
-    `Depositar ${amount} ${asset} a ${bestYield.apy}% APY?`
+    `Depositar ${amount} ${asset} a ${yields.best.apy}% APY?`
   );
 
   if (!confirmar) {

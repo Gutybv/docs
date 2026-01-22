@@ -21,75 +21,61 @@ API Key o X402
 
 ```json
 {
-  "yields": [
+  "chains": ["arbitrum", "base", "ethereum"],
+  "assets": ["USDC", "USDT", "DAI", "WETH"],
+  "rates": [
     {
       "chain": "base",
-      "chainId": 8453,
-      "protocol": "aave",
-      "protocolVersion": "v3",
       "asset": "USDC",
-      "assetAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-      "apy": 8.52,
-      "apyBase": 3.20,
-      "apyReward": 5.32,
-      "tvl": 15000000,
-      "riskLevel": "low",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "apy": 8.52
     },
     {
       "chain": "arbitrum",
-      "chainId": 42161,
-      "protocol": "aave",
-      "protocolVersion": "v3",
       "asset": "USDC",
-      "assetAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-      "apy": 7.23,
-      "apyBase": 2.80,
-      "apyReward": 4.43,
-      "tvl": 25000000,
-      "riskLevel": "low",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "apy": 7.23
     },
     {
       "chain": "ethereum",
-      "chainId": 1,
-      "protocol": "aave",
-      "protocolVersion": "v3",
       "asset": "USDC",
-      "assetAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      "apy": 5.15,
-      "apyBase": 2.10,
-      "apyReward": 3.05,
-      "tvl": 50000000,
-      "riskLevel": "low",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "apy": 5.15
     }
   ],
-  "bestYield": {
+  "best": {
     "chain": "base",
-    "protocol": "aave",
     "asset": "USDC",
-    "apy": 8.52
+    "apy": 8.52,
+    "reasoning": "Highest APY available for USDC"
   },
   "updatedAt": "2024-01-15T10:30:00Z"
 }
 ```
 
-### Campos de Yield
+### Campos de Respuesta
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `chains` | string[] | Chains consultadas |
+| `assets` | string[] | Assets soportados |
+| `rates` | array | Lista de tasas por chain/asset |
+| `best` | object | Mejor opcion recomendada |
+| `updatedAt` | string | Timestamp de actualizacion |
+
+### Campos de Rate
 
 | Campo | Tipo | Descripcion |
 |-------|------|-------------|
 | `chain` | string | Nombre de la chain |
-| `chainId` | number | ID numerico de la chain |
-| `protocol` | string | Protocolo DeFi |
-| `protocolVersion` | string | Version del protocolo |
 | `asset` | string | Token soportado |
-| `assetAddress` | string | Direccion del token |
-| `apy` | number | APY total (base + rewards) |
-| `apyBase` | number | APY base del protocolo |
-| `apyReward` | number | APY de recompensas |
-| `tvl` | number | Total Value Locked en USD |
-| `riskLevel` | string | `low`, `medium`, o `high` |
+| `apy` | number | APY actual en porcentaje |
+
+### Campos de Best
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `chain` | string | Chain con mejor yield |
+| `asset` | string | Asset recomendado |
+| `apy` | number | APY de la mejor opcion |
+| `reasoning` | string | Razonamiento de la recomendacion |
 
 ## Ejemplos
 
@@ -106,18 +92,20 @@ const response = await fetch('https://api.pan.dev/v1/yields', {
   }
 });
 
-const { yields, bestYield } = await response.json();
-console.log('Mejor APY:', bestYield.apy, '% en', bestYield.chain);
+const { rates, best } = await response.json();
+console.log('Mejor APY:', best.apy, '% en', best.chain);
+console.log('Razon:', best.reasoning);
 ```
 
 ```typescript SDK
 const yields = await pan.yields.getAll();
-console.log('Mejor APY:', yields.bestYield.apy);
+console.log('Mejor APY:', yields.best.apy);
+console.log('Todas las rates:', yields.rates);
 ```
 </CodeGroup>
 
 ## Notas
 
 - Los APYs se actualizan cada 5 minutos
-- `bestYield` indica la mejor oportunidad actual
+- `best` indica la mejor oportunidad actual con `reasoning`
 - Cache recomendado: 1-5 minutos

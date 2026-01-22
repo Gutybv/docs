@@ -9,33 +9,45 @@ Los Planes de Ejecucion son estrategias detalladas que Pan genera automaticament
 
 Cuando creas un intent, Pan no ejecuta inmediatamente. Primero pasa por una fase de planificacion sofisticada:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                   FASE DE PLANIFICACION                       │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  1. ANALISIS DE ESTADO                                        │
-│     ├── Consultar balances en todas las chains                │
-│     ├── Identificar tokens disponibles                        │
-│     └── Calcular totales por asset                            │
-│                                                               │
-│  2. EVALUACION DE PROTOCOLOS                                  │
-│     ├── Obtener APYs de Aave en cada chain                    │
-│     ├── Verificar liquidez disponible                         │
-│     └── Evaluar riesgo de protocolo                           │
-│                                                               │
-│  3. OPTIMIZACION DE RUTA                                      │
-│     ├── Calcular opciones de bridge                           │
-│     ├── Estimar costos de gas por ruta                        │
-│     ├── Comparar costo total vs beneficio                     │
-│     └── Seleccionar ruta optima                               │
-│                                                               │
-│  4. GENERACION DE PLAN                                        │
-│     ├── Ordenar operaciones                                   │
-│     ├── Calcular amounts exactos                              │
-│     └── Estimar tiempo total                                  │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Phase1["1. ANALISIS DE ESTADO"]
+        A1["Consultar balances<br/>en todas las chains"]
+        A2["Identificar tokens<br/>disponibles"]
+        A3["Calcular totales<br/>por asset"]
+        A1 --> A2 --> A3
+    end
+
+    subgraph Phase2["2. EVALUACION DE PROTOCOLOS"]
+        B1["Obtener APYs de<br/>Aave en cada chain"]
+        B2["Verificar liquidez<br/>disponible"]
+        B3["Evaluar riesgo<br/>de protocolo"]
+        B1 --> B2 --> B3
+    end
+
+    subgraph Phase3["3. OPTIMIZACION DE RUTA"]
+        C1["Calcular opciones<br/>de bridge"]
+        C2["Estimar costos<br/>de gas por ruta"]
+        C3["Comparar costo<br/>total vs beneficio"]
+        C4["Seleccionar<br/>ruta optima"]
+        C1 --> C2 --> C3 --> C4
+    end
+
+    subgraph Phase4["4. GENERACION DE PLAN"]
+        D1["Ordenar<br/>operaciones"]
+        D2["Calcular amounts<br/>exactos"]
+        D3["Estimar<br/>tiempo total"]
+        D1 --> D2 --> D3
+    end
+
+    Phase1 --> Phase2 --> Phase3 --> Phase4
+    Phase4 --> Result([ExecutionPlan])
+
+    style Phase1 fill:#e3f2fd,stroke:#1976d2
+    style Phase2 fill:#e8f5e9,stroke:#388e3c
+    style Phase3 fill:#fff3e0,stroke:#f57c00
+    style Phase4 fill:#fce4ec,stroke:#c2185b
+    style Result fill:#c8e6c9,stroke:#2e7d32
 ```
 
 ## Estructura de un Plan de Ejecucion
@@ -82,7 +94,11 @@ Cuando creas un intent, Pan no ejecuta inmediatamente. Primero pasa por una fase
 
 ## Tipos de Estrategia
 
-### no-bridge
+<Info>
+  Las estrategias usan nombres internos especificos. Asegurate de usar los nombres correctos en tus integraciones.
+</Info>
+
+### direct-deposit
 
 **Cuando se usa:** Los fondos ya estan en la chain con mejor yield.
 
@@ -91,31 +107,30 @@ Estado del wallet:
 - Base: 1000 USDC
 - Mejor APY: Base (8.52%)
 
-Estrategia: no-bridge
-- Solo deposito directo
+Estrategia: direct-deposit
+- Solo deposito directo a Aave
+- Gas estimado: ~300,000
 ```
 
 ```json
 {
-  "strategy": "no-bridge",
-  "reason": "Funds already on optimal chain",
+  "strategy": "direct-deposit",
+  "reasoning": "Funds already on optimal chain",
   "steps": [
     {
       "type": "deposit",
       "chain": "base",
       "protocol": "aave",
-      "amount": "1000"
+      "asset": "USDC",
+      "amount": 1000
     }
   ],
-  "summary": {
-    "totalSteps": 1,
-    "estimatedGasUsd": 0.80,
-    "estimatedTime": "30 sec - 1 min"
-  }
+  "estimatedGas": 300000,
+  "estimatedTime": 30
 }
 ```
 
-### single-bridge
+### bridge-and-lend
 
 **Cuando se usa:** Los fondos estan concentrados en una chain diferente a la optima.
 
@@ -124,38 +139,40 @@ Estado del wallet:
 - Arbitrum: 1000 USDC
 - Mejor APY: Base (8.52%)
 
-Estrategia: single-bridge
-- Bridge Arbitrum -> Base
-- Deposito en Base
+Estrategia: bridge-and-lend
+- Bridge Arbitrum -> Base via Across
+- Deposito en Aave Base
+- Gas estimado: ~450,000
+- Fee de bridge: ~0.1%
 ```
 
 ```json
 {
-  "strategy": "single-bridge",
-  "sourceChain": "arbitrum",
-  "targetChain": "base",
+  "strategy": "bridge-and-lend",
+  "reasoning": "Bridge to chain with best APY",
   "steps": [
     {
       "type": "bridge",
-      "from": "arbitrum",
-      "to": "base",
-      "amount": "1000"
+      "fromChain": "arbitrum-sepolia",
+      "toChain": "base-sepolia",
+      "asset": "USDC",
+      "amount": 1000,
+      "bridge": "across"
     },
     {
       "type": "deposit",
-      "chain": "base",
-      "amount": "998.50"
+      "chain": "base-sepolia",
+      "protocol": "aave",
+      "asset": "USDC",
+      "amount": 999
     }
   ],
-  "summary": {
-    "totalSteps": 2,
-    "estimatedGasUsd": 2.30,
-    "estimatedTime": "3-7 min"
-  }
+  "estimatedGas": 450000,
+  "estimatedTime": 120
 }
 ```
 
-### multi-bridge
+### multi-bridge-and-lend
 
 **Cuando se usa:** Los fondos estan distribuidos en multiples chains.
 
@@ -166,48 +183,66 @@ Estado del wallet:
 - Base: 300 USDC (ya en destino)
 - Mejor APY: Base (8.52%)
 
-Estrategia: multi-bridge
+Estrategia: multi-bridge-and-lend
 - Bridge Ethereum -> Base
 - Bridge Arbitrum -> Base
-- Deposito total en Base
+- Deposito consolidado en Aave Base
+- Gas estimado: 300,000 + (N x 150,000)
 ```
 
 ```json
 {
-  "strategy": "multi-bridge",
-  "targetChain": "base",
-  "sources": [
-    { "chain": "ethereum", "amount": "200" },
-    { "chain": "arbitrum", "amount": "500" },
-    { "chain": "base", "amount": "300" }
-  ],
+  "strategy": "multi-bridge-and-lend",
+  "reasoning": "Consolidate funds from multiple chains",
   "steps": [
     {
       "type": "bridge",
-      "sequence": 1,
-      "from": "ethereum",
-      "to": "base",
-      "amount": "200"
+      "fromChain": "sepolia",
+      "toChain": "base-sepolia",
+      "asset": "USDC",
+      "amount": 200,
+      "bridge": "across"
     },
     {
       "type": "bridge",
-      "sequence": 2,
-      "from": "arbitrum",
-      "to": "base",
-      "amount": "500"
+      "fromChain": "arbitrum-sepolia",
+      "toChain": "base-sepolia",
+      "asset": "USDC",
+      "amount": 500,
+      "bridge": "across"
     },
     {
       "type": "deposit",
-      "sequence": 3,
-      "chain": "base",
-      "amount": "996.00"
+      "chain": "base-sepolia",
+      "protocol": "aave",
+      "asset": "USDC",
+      "amount": 996
     }
   ],
-  "summary": {
-    "totalSteps": 3,
-    "estimatedGasUsd": 4.50,
-    "estimatedTime": "5-10 min"
-  }
+  "estimatedGas": 600000,
+  "estimatedTime": 300
+}
+```
+
+### simple-withdraw
+
+**Cuando se usa:** Retirar fondos de Aave.
+
+```json
+{
+  "strategy": "simple-withdraw",
+  "reasoning": "Direct withdrawal from Aave",
+  "steps": [
+    {
+      "type": "withdraw",
+      "chain": "base-sepolia",
+      "protocol": "aave",
+      "asset": "USDC",
+      "amount": 500
+    }
+  ],
+  "estimatedGas": 250000,
+  "estimatedTime": 30
 }
 ```
 
@@ -294,39 +329,87 @@ Intercambia un token por otro (en desarrollo).
 
 Una vez generado el plan, Pan ejecuta cada paso en secuencia:
 
+```mermaid
+flowchart TB
+    Start([Iniciar Ejecucion]) --> Loop
+
+    subgraph Loop["Para cada paso en el plan"]
+        direction TB
+
+        subgraph Prep["1. PREPARACION"]
+            P1["Verificar balance"]
+            P2["Verificar gas"]
+            P3["Preparar datos txn"]
+        end
+
+        subgraph Exec["2. EJECUCION"]
+            E1["Firmar via Privy"]
+            E2["Enviar a blockchain"]
+            E3["Obtener txHash"]
+        end
+
+        subgraph Confirm["3. CONFIRMACION"]
+            C1["Esperar 1-2 bloques"]
+            C2["Verificar exito"]
+            C3["Actualizar estado"]
+        end
+
+        subgraph Record["4. REGISTRO"]
+            R1["Guardar txHash + gas"]
+            R2["Calcular costo USD"]
+            R3["Incrementar completedSteps"]
+        end
+
+        Prep --> Exec --> Confirm --> Record
+    end
+
+    Record --> Check{Mas pasos?}
+    Check -->|Si| Loop
+    Check -->|No| Success([Completed])
+
+    Confirm --> Fail{Fallo?}
+    Fail -->|Si| HandleError["Registrar error<br/>Marcar failed"]
+    HandleError --> Failed([Failed])
+
+    style Start fill:#e3f2fd,stroke:#1976d2
+    style Success fill:#c8e6c9,stroke:#2e7d32
+    style Failed fill:#ffcdd2,stroke:#c62828
+    style Prep fill:#e8eaf6,stroke:#3f51b5
+    style Exec fill:#fff3e0,stroke:#f57c00
+    style Confirm fill:#e8f5e9,stroke:#388e3c
+    style Record fill:#fce4ec,stroke:#c2185b
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   FASE DE EJECUCION                          │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Para cada paso en el plan:                                  │
-│                                                              │
-│  1. PREPARACION                                              │
-│     ├── Verificar balance suficiente                         │
-│     ├── Verificar gas disponible                             │
-│     └── Preparar datos de transaccion                        │
-│                                                              │
-│  2. EJECUCION                                                │
-│     ├── Firmar transaccion (via Privy)                       │
-│     ├── Enviar a blockchain                                  │
-│     └── Obtener txHash                                       │
-│                                                              │
-│  3. CONFIRMACION                                             │
-│     ├── Esperar confirmacion (1-2 bloques)                   │
-│     ├── Verificar exito                                      │
-│     └── Actualizar estado del intent                         │
-│                                                              │
-│  4. REGISTRO                                                 │
-│     ├── Guardar txHash y gas usado                           │
-│     ├── Calcular costo en USD                                │
-│     └── Incrementar completedSteps                           │
-│                                                              │
-│  Si algun paso falla:                                        │
-│     ├── Marcar intent como failed                            │
-│     ├── Registrar error detallado                            │
-│     └── Detener ejecucion                                    │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+
+### Diagrama de Secuencia Detallado
+
+```mermaid
+sequenceDiagram
+    participant Engine as Execution Engine
+    participant Privy as Privy Wallet
+    participant Chain as Blockchain
+    participant DB as Database
+
+    loop Para cada paso
+        Engine->>Engine: Verificar precondiciones
+        Engine->>Privy: Firmar transaccion
+        Privy-->>Engine: Transaccion firmada
+
+        Engine->>Chain: Enviar transaccion
+        Chain-->>Engine: txHash
+
+        loop Esperar confirmacion
+            Engine->>Chain: getTransactionReceipt
+            Chain-->>Engine: receipt (o null)
+        end
+
+        alt Transaccion exitosa
+            Engine->>DB: Guardar resultado
+            Engine->>Engine: completedSteps++
+        else Transaccion fallida
+            Engine->>DB: Registrar error
+            Engine-->>Engine: Detener ejecucion
+        end
+    end
 ```
 
 ## Monitorear Ejecucion
