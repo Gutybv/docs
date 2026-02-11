@@ -9,26 +9,26 @@ El SDK oficial de pan para JavaScript/TypeScript simplifica la integración con 
 
 <CodeGroup>
 ```bash npm
-npm install @pan/sdk
+npm install @odisea-labs/pan
 ```
 
 ```bash yarn
-yarn add @pan/sdk
+yarn add @odisea-labs/pan
 ```
 
 ```bash pnpm
-pnpm add @pan/sdk
+pnpm add @odisea-labs/pan
 ```
 
 ```bash bun
-bun add @pan/sdk
+bun add @odisea-labs/pan
 ```
 </CodeGroup>
 
 ## Configuración Basica
 
 ```typescript
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({
   apiKey: process.env.PAN_API_KEY
@@ -43,25 +43,23 @@ const pan = new Pan({
   apiKey: 'pan_sk_...',
 
   // Opcionales
-  baseURL: 'https://api.pan.tech/v1',  // URL base de la API
-  timeout: 30000,                       // Timeout en ms (default: 30000)
-  debug: false,                         // Modo debug (default: false)
-  retries: 3,                          // Reintentos automáticos (default: 3)
+  baseURL: 'https://api.pan.com',  // URL base de la API
+  debug: false,                     // Modo debug (default: false)
+  network: 'mainnet',              // Red: 'mainnet' | 'testnet' (default: 'mainnet')
 });
 ```
 
 | Opcion | Tipo | Default | Descripción |
 |--------|------|---------|-------------|
 | `apiKey` | string | - | Tu API key de pan |
-| `baseURL` | string | `https://api.pan.tech/v1` | URL base |
-| `timeout` | number | 30000 | Timeout en milisegundos |
+| `baseURL` | string | `https://api.pan.com` | URL base |
 | `debug` | boolean | false | Activa logs de debug |
-| `retries` | number | 3 | Reintentos en errores |
+| `network` | `"mainnet"` \| `"testnet"` | `"mainnet"` | Red a utilizar |
 
 ## Verificar Instalación
 
 ```typescript
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
 
@@ -87,7 +85,7 @@ PAN_API_KEY=pan_sk_tu_api_key_aqui
 ```typescript
 // Cargar con dotenv o similar
 import 'dotenv/config';
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({
   apiKey: process.env.PAN_API_KEY
@@ -103,7 +101,8 @@ const pan = new Pan({
 El SDK incluye tipos TypeScript completos:
 
 ```typescript
-import { Pan, Wallet, Intent, Balances, Yields } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
+import type { Wallet, Intent, WalletBalances, AllYieldsResponse } from '@odisea-labs/pan';
 
 const pan = new Pan({ apiKey: process.env.PAN_API_KEY! });
 
@@ -112,12 +111,11 @@ const wallet: Wallet = await pan.wallet.create({
   userId: 'user_123'
 });
 
-const balances: Balances = await pan.wallet.getBalances(wallet.id);
+const balances: WalletBalances = await pan.wallet.getBalances(wallet.id);
 
-const intent: Intent = await pan.lend({
+const intent = await pan.lend({
   walletId: wallet.id,
-  amount: 1000,
-  asset: 'USDC'
+  amount: 1000
 });
 ```
 

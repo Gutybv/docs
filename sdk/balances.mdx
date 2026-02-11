@@ -124,7 +124,7 @@ if (!hasFunds(balances, 'USDC', 1000)) {
 ```typescript
 import { useState, useEffect, useCallback } from 'react';
 import { usePan } from './usePan';
-import type { Balances } from '@pan/sdk';
+import type { WalletBalances } from '@odisea-labs/pan';
 
 interface UseBalancesOptions {
   autoRefresh?: boolean;
@@ -135,7 +135,7 @@ export function useBalances(walletId: string, options: UseBalancesOptions = {}) 
   const { autoRefresh = false, refreshInterval = 30000 } = options;
   const pan = usePan();
 
-  const [balances, setBalances] = useState<Balances | null>(null);
+  const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 

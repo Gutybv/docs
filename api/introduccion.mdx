@@ -10,11 +10,11 @@ Bienvenido a la referencia de pan API. Esta documentación describe todos los en
 Todas las requests deben hacerse a:
 
 ```
-https://api.pan.tech/v1
+https://api.pan.com/api/v1
 ```
 
 <Note>
-  **Entorno de staging**: Para pruebas, usa `https://api-staging.pan.tech/v1`. Staging usa solo testnets y está aislado de produccion.
+  **Entorno de staging**: Para pruebas, usa `https://api-staging.pan.com/api/v1`. Staging usa solo testnets y está aislado de produccion.
 </Note>
 
 ## Autenticación
@@ -31,7 +31,7 @@ Authorization: Bearer pan_sk_tu_api_key
 
 ## Versionado
 
-pan API usa versionado basado en URL. La version actual es `v1`, incluida en la URL base. Versiones futuras usaran paths diferentes (ej. `/v2/`) para mantener compatibilidad hacia atras.
+pan API usa versionado basado en URL. La version actual es `v1`, incluida en la URL base. Versiones futuras usaran paths diferentes (ej. `/api/v2/`) para mantener compatibilidad hacia atras.
 
 ## Formato de Requests
 
@@ -51,9 +51,10 @@ Todas las respuestas retornan JSON:
     ```json
     {
       "id": "pan_wallet_abc123",
-      "userId": "usuario_123",
       "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-      ...
+      "chainType": "ethereum",
+      "chains": ["ethereum", "arbitrum", "base"],
+      "createdAt": "2024-01-15T10:30:00Z"
     }
     ```
   </Accordion>
@@ -95,28 +96,22 @@ pan API usa códigos HTTP estandar:
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `/wallets` | Crear wallet |
-| GET | `/wallets/:userId` | Obtener wallet por userId |
-| GET | `/balances/:walletId` | Obtener balances |
+| POST | `/api/v1/wallets` | Crear wallet |
+| GET | `/api/v1/wallets/:userId` | Obtener wallet por userId |
+| GET | `/api/v1/balances/:walletId` | Obtener balances |
 
 ### Intents
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `/intents` | Crear intent |
-| GET | `/intents/:intentId` | Obtener estado de intent |
+| POST | `/api/v1/intents` | Crear intent |
+| GET | `/api/v1/intents/:intentId` | Obtener estado de intent |
 
 ### Yields
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| GET | `/yields` | Obtener APYs disponibles |
-
-### Demo
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/demo/fund` | Fondear wallet de prueba |
+| GET | `/api/v1/yields` | Obtener APYs disponibles |
 
 ## Rate Limits
 
@@ -143,12 +138,12 @@ Cada request consume créditos de tu cuenta:
 
 | Endpoint | Créditos |
 |----------|----------|
-| POST /wallets | 1 |
-| GET /wallets/:id | 1 |
-| GET /balances/:id | 1 |
-| GET /yields | 1 |
-| POST /intents | 5 |
-| GET /intents/:id | 1 |
+| POST /api/v1/wallets | 1 |
+| GET /api/v1/wallets/:id | 1 |
+| GET /api/v1/balances/:id | 1 |
+| GET /api/v1/yields | 1 |
+| POST /api/v1/intents | 5 |
+| GET /api/v1/intents/:id | 1 |
 
 ## SDKs Oficiales
 

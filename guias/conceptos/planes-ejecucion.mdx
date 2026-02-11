@@ -28,7 +28,7 @@ Cuando creas un intent, pan no ejecuta inmediatamente. Primero pasa por una fase
 
 ```json
 {
-  "strategy": "single-bridge",
+  "strategy": "bridge-and-lend",
   "targetChain": "base",
   "targetProtocol": "aave",
   "expectedApy": 8.52,
@@ -316,7 +316,7 @@ Una vez generado el plan, pan ejecuta cada paso en secuencia:
     Esperar 1-2 bloques, verificar exito, actualizar estado
   </Step>
   <Step title="Registro">
-    Guardar txHash y gas usado, calcular costo USD, incrementar completedSteps
+    Guardar txHash y gas usado, calcular costo USD, agregar resultado
   </Step>
 </Steps>
 
@@ -353,7 +353,7 @@ console.log('Resultados:', intent.results);
   "id": "intent_xyz789",
   "status": "executing",
   "executionPlan": {
-    "strategy": "single-bridge",
+    "strategy": "bridge-and-lend",
     "steps": [
       {
         "type": "bridge",
@@ -368,18 +368,14 @@ console.log('Resultados:', intent.results);
       }
     ]
   },
-  "results": {
-    "completedSteps": 1,
-    "transactions": [
-      {
-        "type": "bridge",
-        "txHash": "0x123abc...",
-        "chain": "arbitrum",
-        "gasUsed": "150000",
-        "gasCostUsd": 1.50
-      }
-    ]
-  }
+  "results": [
+    {
+      "status": "completed",
+      "txHash": "0x123abc...",
+      "gasUsed": 150000
+    }
+  ],
+  "totalGasUsed": 150000
 }
 ```
 
@@ -390,35 +386,26 @@ console.log('Resultados:', intent.results);
   "id": "intent_xyz789",
   "status": "completed",
   "executionPlan": {
-    "strategy": "single-bridge",
+    "strategy": "bridge-and-lend",
     "steps": [
       { "type": "bridge", "sequence": 1, "status": "completed" },
       { "type": "deposit", "sequence": 2, "status": "completed" }
     ]
   },
-  "results": {
-    "completedSteps": 2,
-    "transactions": [
-      {
-        "type": "bridge",
-        "txHash": "0x123abc...",
-        "chain": "arbitrum",
-        "gasUsed": "150000",
-        "gasCostUsd": 1.50
-      },
-      {
-        "type": "deposit",
-        "txHash": "0x456def...",
-        "chain": "base",
-        "gasUsed": "200000",
-        "gasCostUsd": 0.80
-      }
-    ],
-    "totalGasUsed": "350000",
-    "totalGasCostUsd": 2.30,
-    "finalAmount": "998.50",
-    "apy": 8.52
-  },
+  "results": [
+    {
+      "status": "completed",
+      "txHash": "0x123abc...",
+      "gasUsed": 150000
+    },
+    {
+      "status": "completed",
+      "txHash": "0x456def...",
+      "gasUsed": 200000
+    }
+  ],
+  "totalGasUsed": 350000,
+  "totalGasCostUsd": 2.30,
   "completedAt": "2024-01-15T10:45:30Z"
 }
 ```
@@ -478,15 +465,8 @@ Si un bridge falla:
 ```json
 {
   "status": "failed",
-  "error": {
-    "code": "BRIDGE_TIMEOUT",
-    "message": "Bridge did not complete within deadline",
-    "step": 1
-  },
-  "results": {
-    "completedSteps": 0,
-    "failedStep": 1
-  }
+  "errorMessage": "Bridge did not complete within deadline",
+  "results": []
 }
 ```
 
@@ -500,14 +480,7 @@ Si un depósito falla:
 ```json
 {
   "status": "failed",
-  "error": {
-    "code": "DEPOSIT_REVERTED",
-    "message": "Transaction reverted on chain",
-    "step": 2,
-    "details": {
-      "reason": "Insufficient liquidity in protocol"
-    }
-  }
+  "errorMessage": "Transaction reverted on chain"
 }
 ```
 
@@ -529,10 +502,13 @@ const explorers = {
 };
 
 // Mostrar links
-intent.results?.transactions?.forEach(tx => {
-  const chain = tx.chain;
-  const explorer = explorers[chain];
-  console.log(`${tx.type}: ${explorer}${tx.txHash}`);
+intent.results?.forEach((r, i) => {
+  if (r.txHash) {
+    const step = intent.executionPlan?.steps[i];
+    const chain = step?.chain || step?.fromChain;
+    const explorer = explorers[chain];
+    console.log(`Step ${i + 1}: ${explorer}${r.txHash}`);
+  }
 });
 ```
 

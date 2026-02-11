@@ -1,6 +1,6 @@
 ---
 title: "Obtener Yields"
-description: "GET /v1/yields"
+description: "GET /api/v1/yields"
 ---
 
 Obtiene las tasas APY disponibles en protocolos DeFi.
@@ -8,7 +8,7 @@ Obtiene las tasas APY disponibles en protocolos DeFi.
 ## Endpoint
 
 ```
-GET https://api.pan.tech/v1/yields
+GET https://api.pan.com/api/v1/yields
 ```
 
 ## Autenticación
@@ -27,23 +27,43 @@ API Key o X402
     {
       "chain": "base",
       "asset": "USDC",
-      "apy": 8.52
+      "apy": 8.52,
+      "protocol": "aave",
+      "vaultAddress": null,
+      "tvlUsd": 125000000
+    },
+    {
+      "chain": "base",
+      "asset": "USDC",
+      "apy": 9.10,
+      "protocol": "morpho",
+      "vaultAddress": "0x...",
+      "tvlUsd": 45000000
     },
     {
       "chain": "arbitrum",
       "asset": "USDC",
-      "apy": 7.23
+      "apy": 7.23,
+      "protocol": "aave",
+      "vaultAddress": null,
+      "tvlUsd": 98000000
     },
     {
       "chain": "ethereum",
       "asset": "USDC",
-      "apy": 5.15
+      "apy": 5.15,
+      "protocol": "aave",
+      "vaultAddress": null,
+      "tvlUsd": 350000000
     }
   ],
   "best": {
     "chain": "base",
     "asset": "USDC",
-    "apy": 8.52,
+    "apy": 9.10,
+    "protocol": "morpho",
+    "vaultAddress": "0x...",
+    "tvlUsd": 45000000,
     "reasoning": "Highest APY available for USDC"
   },
   "updatedAt": "2024-01-15T10:30:00Z"
@@ -56,7 +76,7 @@ API Key o X402
 |-------|------|-------------|
 | `chains` | string[] | Chains consultadas |
 | `assets` | string[] | Assets soportados |
-| `rates` | array | Lista de tasas por chain/asset |
+| `rates` | array | Lista de tasas por chain/asset/protocol |
 | `best` | object | Mejor opcion recomendada |
 | `updatedAt` | string | Timestamp de actualizacion |
 
@@ -67,6 +87,9 @@ API Key o X402
 | `chain` | string | Nombre de la chain |
 | `asset` | string | Token soportado |
 | `apy` | number | APY actual en porcentaje |
+| `protocol` | string | Protocolo DeFi (`aave` o `morpho`) |
+| `vaultAddress` | string \| null | Dirección del vault (si aplica) |
+| `tvlUsd` | number \| null | Total Value Locked en USD (si disponible) |
 
 ### Campos de Best
 
@@ -75,31 +98,39 @@ API Key o X402
 | `chain` | string | Chain con mejor yield |
 | `asset` | string | Asset recomendado |
 | `apy` | number | APY de la mejor opcion |
+| `protocol` | string | Protocolo de la mejor opción (`aave` o `morpho`) |
+| `vaultAddress` | string \| null | Dirección del vault (si aplica) |
+| `tvlUsd` | number \| null | TVL en USD (si disponible) |
 | `reasoning` | string | Razonamiento de la recomendación |
 
 ## Ejemplos
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/yields" \
+curl -X GET "https://api.pan.com/api/v1/yields" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 
 ```javascript JavaScript
-const response = await fetch('https://api.pan.tech/v1/yields', {
+const response = await fetch('https://api.pan.com/api/v1/yields', {
   headers: {
     'Authorization': `Bearer ${process.env.PAN_API_KEY}`
   }
 });
 
 const { rates, best } = await response.json();
-console.log('Mejor APY:', best.apy, '% en', best.chain);
+console.log('Mejor APY:', best.apy, '% en', best.chain, '(', best.protocol, ')');
 console.log('Razon:', best.reasoning);
 ```
 
 ```typescript SDK
+import Pan from '@odisea-labs/pan';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+
 const yields = await pan.yields.getAll();
 console.log('Mejor APY:', yields.best.apy);
+console.log('Protocolo:', yields.best.protocol);
 console.log('Todas las rates:', yields.rates);
 ```
 </CodeGroup>
@@ -108,4 +139,5 @@ console.log('Todas las rates:', yields.rates);
 
 - Los APYs se actualizan cada 5 minutos
 - `best` indica la mejor oportunidad actual con `reasoning`
+- Protocolos soportados: `aave` y `morpho`
 - Cache recomendado: 1-5 minutos

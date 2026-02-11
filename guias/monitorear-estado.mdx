@@ -17,7 +17,7 @@ console.log('Resultados:', intent.results);
 ```
 
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/intents/intent_xyz789" \
+curl -X GET "https://api.pan.tech/api/v1/intents/intent_xyz789" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 </CodeGroup>
@@ -126,16 +126,16 @@ class IntentTracker {
       }
 
       // Detectar pasos completados
-      const lastCompleted = this.lastState?.results?.completedSteps || 0;
-      const currentCompleted = intent.results?.completedSteps || 0;
+      const lastCompleted = this.lastState?.results?.length || 0;
+      const currentCompleted = intent.results?.length || 0;
 
       if (currentCompleted > lastCompleted) {
         for (let i = lastCompleted; i < currentCompleted; i++) {
           const step = intent.executionPlan.steps[i];
-          const tx = intent.results.transactions[i];
+          const result = intent.results[i];
 
-          this.emit('step', { step, tx, index: i });
-          this.emit('transaction', tx);
+          this.emit('step', { step, result, index: i });
+          this.emit('transaction', result);
         }
       }
 
@@ -163,16 +163,16 @@ tracker
   .on('status', ({ from, to }) => {
     console.log(`Estado: ${from} → ${to}`);
   })
-  .on('step', ({ step, tx, index }) => {
+  .on('step', ({ step, result, index }) => {
     console.log(`Paso ${index + 1} completado: ${step.type}`);
-    console.log(`  TX: ${tx.txHash}`);
+    if (result.txHash) console.log(`  TX: ${result.txHash}`);
   })
   .on('complete', (intent) => {
     console.log('Completado!');
-    console.log(`Gas total: $${intent.results.totalGasCostUsd}`);
+    console.log(`Gas total: $${intent.totalGasCostUsd}`);
   })
   .on('error', (error) => {
-    console.error('Error:', error.message);
+    console.error('Error:', error);
   });
 
 await tracker.track();
@@ -251,17 +251,17 @@ function IntentProgress({ intentId, onComplete, onError }) {
       {intent.executionPlan && (
         <StepsList
           steps={intent.executionPlan.steps}
-          completedSteps={intent.results?.completedSteps || 0}
-          transactions={intent.results?.transactions || []}
+          completedSteps={intent.results?.length || 0}
+          results={intent.results || []}
         />
       )}
 
       {intent.status === 'completed' && (
-        <ResultsSummary results={intent.results} />
+        <ResultsSummary intent={intent} />
       )}
 
       {intent.status === 'failed' && (
-        <ErrorDisplay error={intent.error} />
+        <ErrorDisplay error={intent.errorMessage} />
       )}
     </div>
   );
@@ -277,14 +277,14 @@ function calcularProgreso(intent) {
   if (!intent.executionPlan) return 15;
 
   const total = intent.executionPlan.steps.length;
-  const completados = intent.results?.completedSteps || 0;
+  const completados = intent.results?.length || 0;
 
   return Math.round(15 + (completados / total) * 80);
 }
 
 function getPasoActual(intent) {
   if (!intent?.executionPlan) return null;
-  const completados = intent.results?.completedSteps || 0;
+  const completados = intent.results?.length || 0;
   return intent.executionPlan.steps[completados];
 }
 
@@ -298,22 +298,22 @@ function getStepMessage(step) {
   return mensajes[step.type] || 'Procesando...';
 }
 
-function StepsList({ steps, completedSteps, transactions }) {
+function StepsList({ steps, completedSteps, results }) {
   return (
     <div className="steps-list">
       {steps.map((step, i) => {
         const estado = i < completedSteps ? 'completed' :
                       i === completedSteps ? 'current' : 'pending';
-        const tx = transactions[i];
+        const result = results[i];
 
         return (
           <div key={i} className={`step ${estado}`}>
             <StepIcon type={step.type} estado={estado} />
             <div className="step-info">
               <span className="step-name">{step.type}</span>
-              {tx && (
+              {result?.txHash && (
                 <a
-                  href={getExplorerUrl(step.chain || step.from, tx.txHash)}
+                  href={getExplorerUrl(step.chain || step.fromChain, result.txHash)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="tx-link"
@@ -329,21 +329,17 @@ function StepsList({ steps, completedSteps, transactions }) {
   );
 }
 
-function ResultsSummary({ results }) {
+function ResultsSummary({ intent }) {
   return (
     <div className="results-summary">
       <h4>Completado</h4>
       <div className="result-row">
-        <span>Monto final:</span>
-        <span>{results.finalAmount} USDC</span>
-      </div>
-      <div className="result-row">
-        <span>APY:</span>
-        <span>{results.apy}%</span>
-      </div>
-      <div className="result-row">
         <span>Gas total:</span>
-        <span>${results.totalGasCostUsd.toFixed(2)}</span>
+        <span>${intent.totalGasCostUsd?.toFixed(2) || '0.00'}</span>
+      </div>
+      <div className="result-row">
+        <span>Pasos completados:</span>
+        <span>{intent.results?.length || 0}</span>
       </div>
     </div>
   );
@@ -369,18 +365,21 @@ function getExplorerUrl(chain, txHash) {
 
 // Mostrar transacciones del intent
 function mostrarTransacciónes(intent) {
-  if (!intent.results?.transactions) {
-    console.log('Sin transacciones aun');
+  if (!intent.results?.length) {
+    console.log('Sin resultados aun');
     return;
   }
 
-  console.log('\nTransacciónes:');
-  intent.results.transactions.forEach((tx, i) => {
-    console.log(`\n${i + 1}. ${tx.type}`);
-    console.log(`   Chain: ${tx.chain}`);
-    console.log(`   TX: ${tx.txHash}`);
-    console.log(`   Gas: ${tx.gasUsed} ($${tx.gasCostUsd})`);
-    console.log(`   Explorer: ${getExplorerUrl(tx.chain, tx.txHash)}`);
+  console.log('\nResultados:');
+  intent.results.forEach((r, i) => {
+    const step = intent.executionPlan?.steps[i];
+    const chain = step?.chain || step?.fromChain;
+    console.log(`\n${i + 1}. ${step?.type || 'step'}`);
+    console.log(`   Status: ${r.status}`);
+    if (r.txHash) {
+      console.log(`   TX: ${r.txHash}`);
+      console.log(`   Explorer: ${getExplorerUrl(chain, r.txHash)}`);
+    }
   });
 }
 ```
@@ -395,10 +394,9 @@ async function monitorearConNotificaciones(intentId, notificar) {
     await notificar({
       tipo: 'exito',
       titulo: 'Operación completada',
-      mensaje: `Tu depósito de ${intent.amount} ${intent.asset} fue exitoso`,
+      mensaje: `Tu depósito de ${intent.amount} fue exitoso`,
       datos: {
-        apy: intent.results.apy,
-        txHash: intent.results.transactions.at(-1)?.txHash
+        txHash: intent.results?.at(-1)?.txHash
       }
     });
     return intent;
@@ -408,11 +406,8 @@ async function monitorearConNotificaciones(intentId, notificar) {
     await notificar({
       tipo: 'error',
       titulo: 'Operación fallida',
-      mensaje: intent.error.message,
-      datos: {
-        codigo: intent.error.code,
-        detalles: intent.error.details
-      }
+      mensaje: intent.errorMessage,
+      datos: {}
     });
     return intent;
   }

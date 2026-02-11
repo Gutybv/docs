@@ -124,7 +124,7 @@ const limiter = new RateLimiter(100, 60000); // 100/min
 
 async function makeRequest() {
   await limiter.acquire();
-  return fetch('https://api.pan.tech/v1/yields', { ... });
+  return fetch('https://api.pan.com/api/v1/yields', { ... });
 }
 ```
 
@@ -134,17 +134,17 @@ Ademas del rate limit, cada request consume creditos:
 
 | Endpoint | Créditos |
 |----------|----------|
-| POST /wallets | 1 |
-| GET /wallets/:id | 1 |
-| GET /balances/:id | 1 |
-| GET /yields | 1 |
-| POST /intents | 5 |
-| GET /intents/:id | 1 |
+| POST /api/v1/wallets | 1 |
+| GET /api/v1/wallets/:id | 1 |
+| GET /api/v1/balances/:id | 1 |
+| GET /api/v1/yields | 1 |
+| POST /api/v1/intents | 5 |
+| GET /api/v1/intents/:id | 1 |
 
 ### Verificar Creditos
 
 ```bash
-curl https://api.pan.tech/dashboard/credits \
+curl https://api.pan.com/dashboard/credits \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 

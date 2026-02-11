@@ -8,16 +8,16 @@ description: "Manejo de errores con el SDK"
 El SDK lanza `PanError` para todos los errores de API:
 
 ```typescript
-import { Pan, PanError } from '@pan/sdk';
+import { Pan, PanError } from '@odisea-labs/pan';
 
 try {
   const wallet = await pan.wallet.get('usuario_inexistente');
 } catch (error) {
   if (error instanceof PanError) {
-    console.log('Codigo:', error.code);        // WALLET_NOT_FOUND
+    console.log('Codigo:', error.code);        // NOT_FOUND
     console.log('Mensaje:', error.message);    // Wallet not found
     console.log('Status:', error.statusCode);  // 404
-    console.log('Detalles:', error.details);   // { userId: '...' }
+    console.log('Detalles:', error.details);   // { error: '...', message: '...' }
   }
 }
 ```
@@ -26,10 +26,14 @@ try {
 
 ```typescript
 class PanError extends Error {
-  code: string;           // Código de error
+  code: string;           // Código de error (ej: 'UNAUTHORIZED', 'NOT_FOUND')
   statusCode: number;     // Código HTTP
   message: string;        // Mensaje legible
-  details?: object;       // Información adicional
+  details?: {             // Datos del error del servidor
+    error?: string;
+    message?: string;
+    statusCode?: number;
+  };
 }
 ```
 
@@ -37,20 +41,19 @@ class PanError extends Error {
 
 | Código | Status | Descripción |
 |--------|--------|-------------|
-| `UNAUTHORIZED` | 401 | API key inválida |
-| `FORBIDDEN` | 403 | Sin permisos |
-| `WALLET_NOT_FOUND` | 404 | Wallet no existe |
-| `INTENT_NOT_FOUND` | 404 | Intent no existe |
-| `WALLET_ALREADY_EXISTS` | 409 | Usuario ya tiene wallet |
-| `WALLET_LIMIT_EXCEEDED` | 403 | Límite de wallets |
-| `INSUFFICIENT_FUNDS` | 400 | Fondos insuficientes |
-| `RATE_LIMITED` | 429 | Demasiadas requests |
-| `INVALID_REQUEST` | 400 | Request inválido |
+| `UNAUTHORIZED` | 401 | API key inválida o faltante |
+| `NOT_FOUND` | 404 | Wallet o intent no encontrado |
+| `VALIDATION_ERROR` | 400 | Request inválido (campos faltantes) |
+| `UNSUPPORTED_ACTION` | 400 | Acción de intent no soportada |
+| `INVALID_NETWORK` | 400 | Network debe ser 'mainnet' o 'testnet' |
+| `WALLET_LIMIT_EXCEEDED` | 429 | Límite de wallets del plan alcanzado |
+| `PLANNING_ERROR` | 400 | Error al planificar intent |
+| `INTERNAL_ERROR` | 500 | Error interno del servidor |
 
 ## Manejo por Tipo
 
 ```typescript
-import { Pan, PanError } from '@pan/sdk';
+import { Pan, PanError } from '@odisea-labs/pan';
 
 async function createWalletSafe(userId: string) {
   try {
@@ -59,52 +62,20 @@ async function createWalletSafe(userId: string) {
     if (!(error instanceof PanError)) throw error;
 
     switch (error.code) {
-      case 'WALLET_ALREADY_EXISTS':
-        // Usuario ya tiene wallet, obtenerla
-        return await pan.wallet.get(userId);
-
       case 'WALLET_LIMIT_EXCEEDED':
         throw new Error('Limite de wallets alcanzado. Actualiza tu plan.');
 
       case 'UNAUTHORIZED':
         throw new Error('Error de autenticación. Verifica tu API key.');
 
-      case 'RATE_LIMITED':
-        // Esperar y reintentar
-        await sleep(error.details?.retryAfter || 60);
-        return createWalletSafe(userId);
+      case 'VALIDATION_ERROR':
+        throw new Error(`Datos invalidos: ${error.message}`);
 
       default:
         throw error;
     }
   }
 }
-```
-
-## Reintentos Automáticos
-
-El SDK reintenta automáticamente algunos errores:
-
-```typescript
-const pan = new Pan({
-  apiKey: process.env.PAN_API_KEY!,
-  retries: 3  // Reintentar hasta 3 veces
-});
-
-// Errores que se reintentan:
-// - RATE_LIMITED (429)
-// - INTERNAL_ERROR (500)
-// - SERVICE_UNAVAILABLE (503)
-// - Errores de red
-```
-
-### Desactivar Reintentos
-
-```typescript
-const pan = new Pan({
-  apiKey: process.env.PAN_API_KEY!,
-  retries: 0
-});
 ```
 
 ## Patron Try-Catch
@@ -117,7 +88,7 @@ async function ejecutarConManejo(fn: () => Promise<any>) {
     if (error instanceof PanError) {
       // Error de API conocido
       handlePanError(error);
-    } else if (error.name === 'TypeError' || error.name === 'NetworkError') {
+    } else if (error.name === 'TypeError' || error.message?.includes('Network')) {
       // Error de red
       throw new Error('Error de conexión. Verifica tu internet.');
     } else {
@@ -134,14 +105,11 @@ function handlePanError(error: PanError) {
       throw new Error(`Solicitud invalida: ${error.message}`);
     case 401:
       throw new Error('Sesion expirada. Inicia sesion nuevamente.');
-    case 403:
-      throw new Error('No tienes permisos para está accion.');
     case 404:
       throw new Error('Recurso no encontrado.');
     case 429:
       throw new Error('Demasiadas solicitudes. Intenta en un momento.');
     case 500:
-    case 503:
       throw new Error('Error del servidor. Intenta más tarde.');
     default:
       throw error;
@@ -153,7 +121,7 @@ function handlePanError(error: PanError) {
 
 ```typescript
 import { useState, useCallback } from 'react';
-import { PanError } from '@pan/sdk';
+import { PanError } from '@odisea-labs/pan';
 
 interface ErrorState {
   message: string;
@@ -168,16 +136,15 @@ export function usePanError() {
     if (err instanceof PanError) {
       const messages: Record<string, string> = {
         UNAUTHORIZED: 'Error de autenticación',
-        WALLET_NOT_FOUND: 'Wallet no encontrada',
-        INSUFFICIENT_FUNDS: 'Fondos insuficientes',
-        RATE_LIMITED: 'Demasiadas solicitudes',
+        NOT_FOUND: 'Recurso no encontrado',
+        VALIDATION_ERROR: 'Datos invalidos',
         WALLET_LIMIT_EXCEEDED: 'Limite de wallets alcanzado'
       };
 
       setError({
         message: messages[err.code] || err.message,
         code: err.code,
-        retry: err.code === 'RATE_LIMITED' ? retryFn : undefined
+        retry: retryFn
       });
     } else {
       setError({

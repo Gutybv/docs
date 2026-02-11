@@ -56,15 +56,15 @@ Usa API keys diferentes para cada entorno:
 const config = {
   development: {
     apiKey: process.env.PAN_API_KEY_DEV,
-    baseURL: 'https://api-staging.pan.tech/v1'
+    baseURL: 'https://api-staging.pan.tech/api/v1'
   },
   staging: {
     apiKey: process.env.PAN_API_KEY_STAGING,
-    baseURL: 'https://api-staging.pan.tech/v1'
+    baseURL: 'https://api-staging.pan.tech/api/v1'
   },
   production: {
     apiKey: process.env.PAN_API_KEY_PROD,
-    baseURL: 'https://api.pan.tech/v1'
+    baseURL: 'https://api.pan.tech/api/v1'
   }
 };
 
@@ -155,7 +155,7 @@ Si sospechas que una key fue expuesta:
 
 ```typescript
 // app/api/wallet/route.ts (server-side)
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({ apiKey: process.env.PAN_API_KEY! });
 

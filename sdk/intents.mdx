@@ -9,12 +9,12 @@ description: "Crear y monitorear intents con el SDK"
 const intent = await pan.lend({
   walletId: 'pan_wallet_abc123',
   amount: 1000,
-  asset: 'USDC'  // Opcional, default: 'USDC'
+  network: 'testnet'  // Opcional, default: red configurada en el cliente
 });
 
 console.log('Intent:', intent.id);
 console.log('Estado:', intent.status);
-console.log('Plan:', intent.executionPlan);
+console.log('Estrategia:', intent.executionPlan.strategy);
 ```
 
 ## Crear Intent de Withdraw
@@ -23,8 +23,9 @@ console.log('Plan:', intent.executionPlan);
 const intent = await pan.withdraw({
   walletId: 'pan_wallet_abc123',
   amount: 500,
-  asset: 'USDC',
-  chain: 'base'  // Requerido
+  asset: 'USDC',      // Opcional, default: 'USDC'
+  chain: 'base',       // Requerido
+  network: 'testnet'   // Opcional
 });
 ```
 
@@ -34,9 +35,10 @@ const intent = await pan.withdraw({
 const intent = await pan.bridge({
   walletId: 'pan_wallet_abc123',
   amount: 500,
-  asset: 'USDC',
-  fromChain: 'arbitrum-sepolia',
-  toChain: 'base-sepolia'
+  asset: 'USDC',                  // Opcional, default: 'USDC'
+  fromChain: 'arbitrum-sepolia',   // Requerido
+  toChain: 'base-sepolia',        // Requerido
+  network: 'testnet'              // Opcional
 });
 ```
 
@@ -50,7 +52,8 @@ const intent = await pan.transfer({
   to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
   amount: 100,
   asset: 'USDC',
-  chain: 'arbitrum-sepolia'
+  chain: 'arbitrum-sepolia',
+  network: 'testnet'
 });
 ```
 
@@ -64,7 +67,8 @@ const intent = await pan.transfer({
 const intent = await pan.getIntent('intent_xyz789');
 
 console.log('Estado:', intent.status);
-console.log('Pasos completados:', intent.results?.completedSteps);
+console.log('Estrategia:', intent.strategy);
+console.log('Gas total:', intent.totalGasCostUsd);
 ```
 
 ## Tipos
@@ -74,6 +78,7 @@ console.log('Pasos completados:', intent.results?.completedSteps);
 interface LendIntentParams {
   walletId: string;
   amount: number;
+  network?: 'mainnet' | 'testnet';
 }
 
 interface WithdrawIntentParams {
@@ -81,6 +86,7 @@ interface WithdrawIntentParams {
   amount: number;
   asset?: string;
   chain: string;  // Requerido
+  network?: 'mainnet' | 'testnet';
 }
 
 interface BridgeIntentParams {
@@ -89,6 +95,7 @@ interface BridgeIntentParams {
   asset?: string;
   fromChain: string;  // Requerido
   toChain: string;    // Requerido
+  network?: 'mainnet' | 'testnet';
 }
 
 interface TransferIntentParams {
@@ -97,24 +104,45 @@ interface TransferIntentParams {
   amount: number;
   asset?: string;
   chain: string;      // Requerido
+  network?: 'mainnet' | 'testnet';
 }
 
-// Respuesta de Intent
+// Respuesta de creación de intent
+interface CreateIntentResponse {
+  id: string;
+  status: string;
+  executionPlan: ExecutionPlan;
+  estimatedGas?: number;
+}
+
+// Intent completo (al consultar estado)
 interface Intent {
   id: string;
-  developerId: string;
-  walletId: string;
-  status: 'pending' | 'planning' | 'executing' | 'completed' | 'failed';
-  action: 'lend' | 'withdraw' | 'bridge' | 'transfer' | 'swap';
+  status: 'pending' | 'planning' | 'executing' | 'completed' | 'failed' | 'awaiting_confirmation';
+  action: string;
   amount: number;
-  executionPlan?: ExecutionPlan;
-  results?: ExecutionResult[];
+  strategy?: string;
+  steps?: number;
+  bridge?: {
+    fromChain: string;
+    toChain: string;
+    inputAmount: number;
+    outputAmount: number;
+    fees: number;
+    txHash: string;
+    fillStatus: string;
+  } | null;
+  deposit?: {
+    chain: string;
+    protocol: string;
+    amount: number;
+    txHash: string;
+  } | null;
   totalGasUsed?: number;
   totalGasCostUsd?: number;
-  errorMessage?: string;
   createdAt: string;
-  updatedAt: string;
   completedAt?: string;
+  error?: string;
 }
 
 // Plan de ejecución
@@ -127,19 +155,30 @@ interface ExecutionPlan {
 }
 
 // Tipos de pasos
-type ExecutionStepType = 'deposit' | 'withdraw' | 'swap' | 'bridge' | 'consolidate';
+type ExecutionStepType =
+  | 'deposit' | 'withdraw' | 'swap' | 'bridge' | 'consolidate'
+  | 'confidential-wrap' | 'confidential-transfer' | 'confidential-unwrap';
 
 interface ExecutionStep {
   type: ExecutionStepType;
-  status?: 'pending' | 'executing' | 'completed' | 'failed';
 }
 
 interface DepositStep extends ExecutionStep {
   type: 'deposit';
-  protocol: 'aave';
+  protocol: 'aave' | 'compound' | 'morpho';
   asset: string;
   amount: number;
   chain: string;
+  vaultAddress?: string;  // Para Morpho
+}
+
+interface WithdrawStep extends ExecutionStep {
+  type: 'withdraw';
+  protocol: 'aave' | 'compound' | 'morpho';
+  asset: string;
+  amount: number;
+  chain: string;
+  vaultAddress?: string;
 }
 
 interface BridgeStep extends ExecutionStep {
@@ -148,7 +187,17 @@ interface BridgeStep extends ExecutionStep {
   toChain: string;
   asset: string;
   amount: number;
-  bridge?: 'across';
+  bridge?: 'across' | 'stargate' | 'best';
+}
+
+interface SwapStep extends ExecutionStep {
+  type: 'swap';
+  from: string;
+  to: string;
+  amount: number;
+  chain: string;
+  maxSlippage?: number;
+  dex?: '1inch' | 'uniswap' | 'best';
 }
 ```
 
@@ -164,7 +213,7 @@ async function waitForIntent(intentId: string): Promise<Intent> {
     }
 
     if (intent.status === 'failed') {
-      throw new PanError(intent.error!);
+      throw new Error(intent.error || 'Intent failed');
     }
 
     await new Promise(r => setTimeout(r, 5000));
@@ -172,43 +221,37 @@ async function waitForIntent(intentId: string): Promise<Intent> {
 }
 
 // Uso
-const intent = await pan.lend({ walletId, amount: 1000, asset: 'USDC' });
+const intent = await pan.lend({ walletId, amount: 1000 });
 const result = await waitForIntent(intent.id);
-console.log('Completado! Gas:', result.results?.totalGasCostUsd);
+console.log('Completado! Gas:', result.totalGasCostUsd);
 ```
 
 ## Con Callback de Progreso
 
 ```typescript
 async function executeWithProgress(
-  params: LendParams,
+  params: LendIntentParams,
   onProgress: (intent: Intent) => void
 ): Promise<Intent> {
-  const intent = await pan.lend(params);
-  onProgress(intent);
+  const created = await pan.lend(params);
 
-  while (true) {
-    const updated = await pan.getIntent(intent.id);
-    onProgress(updated);
+  let current = await pan.getIntent(created.id);
+  onProgress(current);
 
-    if (updated.status === 'completed' || updated.status === 'failed') {
-      return updated;
-    }
-
+  while (current.status !== 'completed' && current.status !== 'failed') {
     await new Promise(r => setTimeout(r, 5000));
+    current = await pan.getIntent(created.id);
+    onProgress(current);
   }
+
+  return current;
 }
 
 // Uso
 const result = await executeWithProgress(
-  { walletId, amount: 1000, asset: 'USDC' },
+  { walletId, amount: 1000 },
   (intent) => {
     console.log(`Estado: ${intent.status}`);
-    if (intent.executionPlan) {
-      const done = intent.results?.completedSteps || 0;
-      const total = intent.executionPlan.steps.length;
-      console.log(`Progreso: ${done}/${total}`);
-    }
   }
 );
 ```
@@ -218,32 +261,33 @@ const result = await executeWithProgress(
 ```typescript
 import { useState, useCallback } from 'react';
 import { usePan } from './usePan';
-import type { Intent, LendParams } from '@pan/sdk';
+import type { LendIntentParams } from '@odisea-labs/pan';
 
 export function useIntent() {
   const pan = usePan();
-  const [intent, setIntent] = useState<Intent | null>(null);
+  const [intent, setIntent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const execute = useCallback(async (params: LendParams) => {
+  const execute = useCallback(async (params: LendIntentParams) => {
     try {
       setLoading(true);
       setError(null);
 
       // Crear intent
-      let current = await pan.lend(params);
+      const created = await pan.lend(params);
+      let current = await pan.getIntent(created.id);
       setIntent(current);
 
       // Monitorear
       while (current.status !== 'completed' && current.status !== 'failed') {
         await new Promise(r => setTimeout(r, 5000));
-        current = await pan.getIntent(current.id);
+        current = await pan.getIntent(created.id);
         setIntent(current);
       }
 
       if (current.status === 'failed') {
-        throw new Error(current.error?.message || 'Intent failed');
+        throw new Error(current.error || 'Intent failed');
       }
 
       return current;
@@ -255,16 +299,11 @@ export function useIntent() {
     }
   }, [pan]);
 
-  const progress = intent?.executionPlan
-    ? ((intent.results?.completedSteps || 0) / intent.executionPlan.steps.length) * 100
-    : 0;
-
   return {
     intent,
     loading,
     error,
     execute,
-    progress,
     status: intent?.status
   };
 }
@@ -273,14 +312,13 @@ export function useIntent() {
 ```tsx
 // Uso en componente
 function LendButton({ walletId }) {
-  const { execute, loading, progress, status } = useIntent();
+  const { execute, loading, status } = useIntent();
 
   const handleLend = async () => {
     try {
       const result = await execute({
         walletId,
-        amount: 1000,
-        asset: 'USDC'
+        amount: 1000
       });
       console.log('Completado!', result);
     } catch (err) {
@@ -291,7 +329,7 @@ function LendButton({ walletId }) {
   return (
     <div>
       <button onClick={handleLend} disabled={loading}>
-        {loading ? `${progress.toFixed(0)}%` : 'Depositar'}
+        {loading ? 'Procesando...' : 'Depositar'}
       </button>
       {status && <p>Estado: {status}</p>}
     </div>

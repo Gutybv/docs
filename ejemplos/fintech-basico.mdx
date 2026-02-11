@@ -55,7 +55,7 @@ mkdir fintech-savings && cd fintech-savings
 npm init -y
 
 # Instalar dependencias
-npm install express @pan/sdk prisma @prisma/client dotenv zod
+npm install express @odisea-labs/pan prisma @prisma/client dotenv zod
 npm install -D typescript @types/express @types/node ts-node
 
 # Inicializar TypeScript y Prisma
@@ -160,7 +160,7 @@ enum TransactionStatus {
 
 ```typescript
 // src/services/pan.service.ts
-import { Pan, Wallet, Balances, Intent, PanError } from '@pan/sdk';
+import { Pan, Wallet, Balances, Intent, PanError } from '@odisea-labs/pan';
 import { prisma } from '../lib/prisma';
 
 class PanService {
@@ -223,7 +223,7 @@ class PanService {
 
       return wallet;
     } catch (error) {
-      if (error instanceof PanError && error.code === 'WALLET_ALREADY_EXISTS') {
+      if (error instanceof PanError && error.code === 'WALLET_LIMIT_EXCEEDED') {
         // Wallet existe pero no está en nuestra DB
         const wallet = await this.pan.wallet.get(userId);
 
@@ -328,8 +328,7 @@ class PanService {
       // Crear intent de lending
       const intent = await this.pan.lend({
         walletId: user.panWalletId,
-        amount,
-        asset: 'USDC'
+        amount
       });
 
       // Actualizar transacción con intent

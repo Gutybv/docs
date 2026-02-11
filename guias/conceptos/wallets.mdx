@@ -30,7 +30,7 @@ Todos accesibles con la misma dirección `0x742d35Cc...`
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.pan.tech/v1/wallets \
+curl -X POST https://api.pan.tech/api/v1/wallets \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -58,7 +58,7 @@ const wallet = await pan.wallet.create({
 
 ```python Python
 wallet = requests.post(
-    'https://api.pan.tech/v1/wallets',
+    'https://api.pan.tech/api/v1/wallets',
     headers={'Authorization': f'Bearer {API_KEY}'},
     json={
         'userId': 'usuario_maria_123',
@@ -115,7 +115,7 @@ wallet = requests.post(
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/wallets/usuario_maria_123" \
+curl -X GET "https://api.pan.tech/api/v1/wallets/usuario_maria_123" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 
@@ -134,7 +134,7 @@ Obtiene balances de todas las chains y tokens con una sola llamada:
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/balances/pan_wallet_a1b2c3d4e5f6" \
+curl -X GET "https://api.pan.tech/api/v1/balances/pan_wallet_a1b2c3d4e5f6" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 
@@ -376,7 +376,7 @@ async function getOrCreateWallet(userId) {
     // Intentar obtener wallet existente
     return await pan.wallet.get(userId);
   } catch (error) {
-    if (error.code === 'WALLET_NOT_FOUND') {
+    if (error.code === 'NOT_FOUND') {
       // Crear si no existe
       return await pan.wallet.create({ userId });
     }
@@ -427,24 +427,12 @@ function formatChainName(chain) {
 
 ## Fondear Wallets
 
-### En Testnet (Demo)
+### En Testnet
 
-pan ofrece un endpoint para fondear wallets de prueba:
-
-```javascript
-await fetch('https://api.pan.tech/v1/demo/fund', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${API_KEY}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    walletId: 'pan_wallet_abc123',
-    chain: 'arbitrum-sepolia',
-    amount: 1000 // USDC
-  })
-});
-```
+Usa faucets oficiales para obtener tokens de prueba:
+- [Circle USDC Faucet](https://faucet.circle.com) - USDC en testnets
+- [Arbitrum Sepolia Faucet](https://www.alchemy.com/faucets/arbitrum-sepolia)
+- [Base Sepolia Faucet](https://www.alchemy.com/faucets/base-sepolia)
 
 ### En Produccion
 

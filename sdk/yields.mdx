@@ -9,55 +9,72 @@ description: "Consultar APYs con el SDK"
 const yields = await pan.yields.getAll();
 
 console.log('Mejor APY:', yields.best.apy, '%');
+console.log('Protocolo:', yields.best.protocol);  // 'aave' | 'morpho'
 console.log('En chain:', yields.best.chain);
 ```
 
 ## Estructura de Respuesta
 
 ```typescript
-interface YieldsResponse {
+interface AllYieldsResponse {
+  chains: string[];
+  assets: string[];
   rates: Rate[];
-  best: {
-    chain: string;
-    asset: string;
-    apy: number;
-    reasoning: string;
-  };
+  best: BestRate;
+  updatedAt: string;
 }
 
 interface Rate {
   chain: string;
-  protocol: string;
   asset: string;
   apy: number;
+  protocol: 'aave' | 'morpho';
+  vaultAddress?: string;   // Dirección del vault (Morpho)
+  tvlUsd?: number;         // Total Value Locked en USD (Morpho)
+}
+
+interface BestRate {
+  chain: string;
+  asset: string;
+  apy: number;
+  protocol: 'aave' | 'morpho';
+  vaultAddress?: string;
+  tvlUsd?: number;
+  reasoning: string;
 }
 ```
+
+<Note>
+  Los yields se obtienen de **Aave V3** y **Morpho** en tiempo real. Los rates de Morpho incluyen `vaultAddress` y `tvlUsd` adicionales.
+</Note>
 
 ## Listar Yields
 
 ```typescript
 const { rates, best } = await pan.yields.getAll();
 
-// Ordenar por APY
-const sorted = [...rates].sort((a, b) => b.apy - a.apy);
-
-sorted.forEach(y => {
-  const isBest = y.chain === best.chain ? ' (MEJOR)' : '';
-  console.log(`${y.chain}: ${y.apy.toFixed(2)}%${isBest}`);
+// Ordenar por APY (ya vienen ordenados)
+rates.forEach(y => {
+  const isBest = y.chain === best.chain && y.protocol === best.protocol ? ' (MEJOR)' : '';
+  console.log(`${y.protocol} ${y.chain} ${y.asset}: ${y.apy.toFixed(2)}%${isBest}`);
 });
 ```
 
 ## Helpers
 
-### Rate por Chain
+### Rate por Chain y Protocolo
 
 ```typescript
-function getRateForChain(yields: YieldsResponse, chain: string): Rate | undefined {
-  return yields.rates.find(y => y.chain === chain);
+function getRateForChain(yields: AllYieldsResponse, chain: string, protocol?: string): Rate | undefined {
+  return yields.rates.find(y =>
+    y.chain === chain && (!protocol || y.protocol === protocol)
+  );
 }
 
-const baseRate = getRateForChain(yields, 'base');
-console.log('Base APY:', baseRate?.apy);
+const baseAaveRate = getRateForChain(yields, 'base', 'aave');
+const baseMorphoRate = getRateForChain(yields, 'base', 'morpho');
+console.log('Base Aave APY:', baseAaveRate?.apy);
+console.log('Base Morpho APY:', baseMorphoRate?.apy);
 ```
 
 ### Calcular Ganancias
@@ -85,7 +102,7 @@ console.log('Ganancia anual:', earnings.toFixed(2)); // ~88.97
 ```typescript
 import { useState, useEffect, useCallback } from 'react';
 import { usePan } from './usePan';
-import type { YieldsResponse } from '@pan/sdk';
+import type { AllYieldsResponse } from '@odisea-labs/pan';
 
 interface UseYieldsOptions {
   autoRefresh?: boolean;
@@ -96,7 +113,7 @@ export function useYields(options: UseYieldsOptions = {}) {
   const { autoRefresh = false, refreshInterval = 300000 } = options; // 5 min default
   const pan = usePan();
 
-  const [yields, setYields] = useState<YieldsResponse | null>(null);
+  const [yields, setYields] = useState<AllYieldsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -126,6 +143,8 @@ export function useYields(options: UseYieldsOptions = {}) {
   return {
     rates: yields?.rates || [],
     best: yields?.best,
+    chains: yields?.chains || [],
+    assets: yields?.assets || [],
     loading,
     error,
     refresh: fetch
@@ -144,7 +163,7 @@ function YieldsDisplay() {
     <div>
       {best && (
         <div className="best-yield">
-          Mejor: {best.apy.toFixed(2)}% en {best.chain}
+          Mejor: {best.apy.toFixed(2)}% en {best.chain} ({best.protocol})
         </div>
       )}
 
@@ -152,13 +171,17 @@ function YieldsDisplay() {
         <thead>
           <tr>
             <th>Chain</th>
+            <th>Protocolo</th>
+            <th>Asset</th>
             <th>APY</th>
           </tr>
         </thead>
         <tbody>
           {rates.map(y => (
-            <tr key={y.chain}>
+            <tr key={`${y.chain}-${y.protocol}-${y.asset}`}>
               <td>{y.chain}</td>
+              <td>{y.protocol}</td>
+              <td>{y.asset}</td>
               <td>{y.apy.toFixed(2)}%</td>
             </tr>
           ))}

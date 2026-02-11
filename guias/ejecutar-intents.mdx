@@ -11,15 +11,14 @@ El caso más comun: depositar fondos para ganar intereses.
 
 <CodeGroup>
 ```javascript JavaScript
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
 
 // Crear intent de lending
 const intent = await pan.lend({
   walletId: 'pan_wallet_abc123',
-  amount: 1000,
-  asset: 'USDC'
+  amount: 1000
   // No especificamos chain - pan elige la mejor
 });
 
@@ -32,7 +31,7 @@ console.log('Estrategia:', intent.executionPlan?.strategy);
 import requests
 
 response = requests.post(
-    'https://api.pan.tech/v1/intents',
+    'https://api.pan.tech/api/v1/intents',
     headers={
         'Authorization': f'Bearer {API_KEY}',
         'Content-Type': 'application/json'
@@ -51,7 +50,7 @@ print(f"Estado: {intent['status']}")
 ```
 
 ```bash cURL
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.tech/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -80,8 +79,7 @@ async function ejecutarLending(walletId, amount) {
   // 3. Crear intent
   const intent = await pan.lend({
     walletId,
-    amount,
-    asset: 'USDC'
+    amount
   });
 
   console.log(`Intent creado: ${intent.id}`);
@@ -93,9 +91,7 @@ async function ejecutarLending(walletId, amount) {
   // 5. Mostrar resultado
   console.log('\n=== Resultado ===');
   console.log(`Estado: ${resultado.status}`);
-  console.log(`Gas total: $${resultado.results.totalGasCostUsd}`);
-  console.log(`Monto final: ${resultado.results.finalAmount} USDC`);
-  console.log(`APY: ${resultado.results.apy}%`);
+  console.log(`Gas total: $${resultado.totalGasCostUsd}`);
 
   return resultado;
 }
@@ -110,7 +106,7 @@ async function monitorearIntent(intentId) {
     // Mostrar progreso
     if (intent.executionPlan) {
       const total = intent.executionPlan.steps.length;
-      const completados = intent.results?.completedSteps || 0;
+      const completados = intent.results?.length || 0;
       console.log(`  [${completados}/${total}] ${intent.status}`);
     }
 
@@ -143,12 +139,11 @@ Retirar fondos de un protocolo de lending:
 const intent = await pan.withdraw({
   walletId: 'pan_wallet_abc123',
   amount: 500,
-  asset: 'USDC',
   chain: 'base' // Requerido: de donde retirar
 });
 
 const resultado = await monitorearIntent(intent.id);
-console.log(`Retirado: ${resultado.results.finalAmount} USDC`);
+console.log(`Retirado exitosamente. Gas: $${resultado.totalGasCostUsd}`);
 ```
 
 ## Ejecutar Bridge
@@ -159,13 +154,12 @@ Mover fondos entre chains:
 const intent = await pan.bridge({
   walletId: 'pan_wallet_abc123',
   amount: 500,
-  asset: 'USDC',
   fromChain: 'arbitrum',
   toChain: 'base'
 });
 
 const resultado = await monitorearIntent(intent.id);
-console.log(`Transferido a Base: ${resultado.results.finalAmount} USDC`);
+console.log(`Transferido a Base. Gas: $${resultado.totalGasCostUsd}`);
 ```
 
 ## Verificar Antes de Ejecutar
@@ -211,7 +205,7 @@ async function verificarYEjecutar(walletId, amount, asset = 'USDC') {
   }
 
   // 6. Ejecutar
-  const intent = await pan.lend({ walletId, amount, asset });
+  const intent = await pan.lend({ walletId, amount });
   return await monitorearIntent(intent.id);
 }
 ```
@@ -236,7 +230,7 @@ class IntentTracker {
         status: intent.status,
         progress,
         step: this.getCurrentStep(intent),
-        transactions: intent.results?.transactions || [],
+        results: intent.results || [],
         error: intent.error
       });
 
@@ -252,7 +246,7 @@ class IntentTracker {
   calcularProgreso(intent) {
     if (!intent.executionPlan) return 0;
     const total = intent.executionPlan.steps.length;
-    const completados = intent.results?.completedSteps || 0;
+    const completados = intent.results?.length || 0;
 
     // Ajustar por estado actual
     if (intent.status === 'planning') return 5;
@@ -268,7 +262,7 @@ class IntentTracker {
 
     if (!intent.executionPlan) return null;
 
-    const completados = intent.results?.completedSteps || 0;
+    const completados = intent.results?.length || 0;
     const pasoActual = intent.executionPlan.steps[completados];
 
     if (!pasoActual) return null;
@@ -296,8 +290,8 @@ const tracker = new IntentTracker((update) => {
   setMessage(update.step?.message);
 
   // Mostrar transacciones completadas
-  update.transactions.forEach(tx => {
-    console.log(`  ✓ ${tx.type}: ${tx.txHash}`);
+  update.results.forEach(r => {
+    console.log(`  ✓ ${r.status}: ${r.txHash}`);
   });
 });
 
@@ -313,32 +307,22 @@ async function ejecutarConManejo(params) {
     return await monitorearIntent(intent.id);
   } catch (error) {
     switch (error.code) {
-      case 'INSUFFICIENT_FUNDS':
-        console.error('No hay fondos suficientes');
-        console.error(`Necesitas: ${error.details.required}`);
-        console.error(`Tienes: ${error.details.available}`);
-        // Mostrar UI para depositar
+      case 'VALIDATION_ERROR':
+        console.error('Datos inválidos:', error.message);
         break;
 
-      case 'WALLET_NOT_FOUND':
-        console.error('Wallet no encontrada');
-        // Crear wallet primero
+      case 'NOT_FOUND':
+        console.error('Recurso no encontrado');
+        // Verificar walletId o intentId
         break;
 
-      case 'BRIDGE_FAILED':
-        console.error('Bridge fallo - los fondos están seguros en origen');
-        // Reintentar o notificar usuario
+      case 'PLANNING_ERROR':
+        console.error('No se pudo planificar:', error.message);
+        // Verificar fondos suficientes
         break;
 
-      case 'DEPOSIT_FAILED':
-        console.error('Deposito fallo - fondos en wallet de destino');
-        // Reintentar deposito
-        break;
-
-      case 'RATE_LIMITED':
-        console.error('Demasiadas solicitudes - espera un momento');
-        await new Promise(r => setTimeout(r, 60000));
-        return ejecutarConManejo(params); // Reintentar
+      case 'UNSUPPORTED_ACTION':
+        console.error('Acción no soportada');
         break;
 
       default:
@@ -354,9 +338,7 @@ async function ejecutarConManejo(params) {
 ```javascript
 async function ejecutarConReintentos(params, maxReintentos = 3) {
   const erroresReintentables = [
-    'BRIDGE_TIMEOUT',
-    'NETWORK_ERROR',
-    'RPC_ERROR'
+    'INTERNAL_ERROR'
   ];
 
   for (let intento = 1; intento <= maxReintentos; intento++) {
@@ -369,7 +351,7 @@ async function ejecutarConReintentos(params, maxReintentos = 3) {
     } catch (error) {
       console.error(`Intento ${intento} fallido:`, error.message);
 
-      // Solo reintentar errores transitorios
+      // Solo reintentar errores transitorios del servidor
       if (!erroresReintentables.includes(error.code)) {
         throw error;
       }
@@ -408,8 +390,7 @@ function LendingForm({ walletId }) {
       // Crear intent
       const intent = await pan.lend({
         walletId,
-        amount: parseFloat(amount),
-        asset: 'USDC'
+        amount: parseFloat(amount)
       });
 
       setStatus('executing');
@@ -421,7 +402,7 @@ function LendingForm({ walletId }) {
         // Actualizar progreso
         if (updated.executionPlan) {
           const total = updated.executionPlan.steps.length;
-          const done = updated.results?.completedSteps || 0;
+          const done = updated.results?.length || 0;
           setProgress(Math.round((done / total) * 100));
         }
 
@@ -474,9 +455,7 @@ function LendingForm({ walletId }) {
       {status === 'completed' && (
         <div className="success">
           <h3>Completado!</h3>
-          <p>Monto depositado: {result.finalAmount} USDC</p>
-          <p>APY: {result.apy}%</p>
-          <p>Gas: ${result.totalGasCostUsd}</p>
+          <p>Operación completada exitosamente</p>
           <button onClick={() => setStatus('idle')}>
             Nueva operación
           </button>

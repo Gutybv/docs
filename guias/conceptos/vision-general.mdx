@@ -78,8 +78,7 @@ La API está construida alrededor de tres conceptos fundamentales: **Wallets**, 
     ```javascript
     const intent = await pan.lend({
       walletId: wallet.id,
-      amount: 1000,
-      asset: 'USDC'
+      amount: 1000
       // No específicas chain - pan encuentra el mejor APY
     });
     ```
@@ -96,7 +95,7 @@ La API está construida alrededor de tres conceptos fundamentales: **Wallets**, 
 
     ```json
     {
-      "strategy": "multi-bridge",
+      "strategy": "multi-bridge-and-lend",
       "steps": [
         { "type": "bridge", "from": "ethereum", "to": "base", "amount": "200" },
         { "type": "bridge", "from": "arbitrum", "to": "base", "amount": "500" },
@@ -278,13 +277,12 @@ Veamos un ejemplo real paso a paso:
     ```javascript
     const intent = await pan.lend({
       walletId: wallet.id,
-      amount: 1000,
-      asset: 'USDC'
+      amount: 1000
     });
     ```
 
     pan analiza y crea un plan:
-    - **Estrategia**: multi-bridge (consolidar en mejor yield)
+    - **Estrategia**: multi-bridge-and-lend (consolidar en mejor yield)
     - **Paso 1**: Bridge 500 USDC de Ethereum a Base
     - **Paso 2**: Bridge 500 USDC de Arbitrum a Base
     - **Paso 3**: Depositar 1000 USDC en Aave Base
@@ -296,7 +294,7 @@ Veamos un ejemplo real paso a paso:
     // Polling cada 5 segundos
     let intent = await pan.getIntent(intent.id);
     while (intent.status === 'executing') {
-      console.log(`Progreso: ${intent.results.completedSteps}/${intent.executionPlan.steps.length}`);
+      console.log(`Progreso: ${intent.results?.length || 0}/${intent.executionPlan.steps.length}`);
       await sleep(5000);
       intent = await pan.getIntent(intent.id);
     }
@@ -354,7 +352,7 @@ Veamos un ejemplo real paso a paso:
 
   <Card title="Con pan">
     ```javascript
-    import { Pan } from '@pan/sdk';
+    import { Pan } from '@odisea-labs/pan';
 
     const pan = new Pan({
       apiKey: process.env.PAN_API_KEY
@@ -363,16 +361,18 @@ Veamos un ejemplo real paso a paso:
     // Una sola llamada hace todo
     const intent = await pan.lend({
       walletId: 'wallet_abc123',
-      amount: 1000,
-      asset: 'USDC'
+      amount: 1000
     });
 
-    // Monitorear progreso
-    const result = await pan.waitForIntent(intent.id);
+    // Monitorear progreso con polling
+    let result = await pan.getIntent(intent.id);
+    while (result.status !== 'completed' && result.status !== 'failed') {
+      await new Promise(r => setTimeout(r, 5000));
+      result = await pan.getIntent(intent.id);
+    }
 
     console.log('Completado!');
-    console.log(`APY: ${result.results.apy}%`);
-    console.log(`Gas: $${result.results.totalGasCostUsd}`);
+    console.log(`Gas: $${result.totalGasCostUsd}`);
     ```
   </Card>
 </CardGroup>

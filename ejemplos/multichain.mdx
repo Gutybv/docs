@@ -63,8 +63,7 @@ async function depositFromArbitrum(amount: number) {
 // con pan - Una llamada
 const intent = await pan.lend({
   walletId: 'wallet_123',
-  amount: 1000,
-  asset: 'USDC'
+  amount: 1000
 });
 // pan automaticamente:
 // - Detecta fondos en cualquier chain
@@ -85,7 +84,7 @@ pan consolida automáticamente los fondos en la chain con mejor rendimiento.
 ### Detectar Fondos Distribuidos
 
 ```typescript
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({ apiKey: process.env.PAN_API_KEY! });
 
@@ -183,9 +182,7 @@ async function consolidateFunds(
   // Usar lend para consolidar (pan optimiza automaticamente)
   const intent = await pan.lend({
     walletId,
-    amount: availableAmount,
-    asset: 'USDC',
-    preferredChain: targetChain
+    amount: availableAmount
   });
 
   return {
@@ -315,9 +312,7 @@ async function smartDeposit(
   // Ejecutar deposito
   const intent = await pan.lend({
     walletId,
-    amount,
-    asset: 'USDC',
-    preferredChain: selectedYield.chain
+    amount
   });
 
   return {

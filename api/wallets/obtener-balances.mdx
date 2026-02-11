@@ -1,6 +1,6 @@
 ---
 title: "Obtener Balances"
-description: "GET /v1/balances/:walletId"
+description: "GET /api/v1/balances/:walletId"
 ---
 
 Obtiene los balances de tokens en todas las chains soportadas.
@@ -8,7 +8,7 @@ Obtiene los balances de tokens en todas las chains soportadas.
 ## Endpoint
 
 ```
-GET https://api.pan.tech/v1/balances/:walletId
+GET https://api.pan.com/api/v1/balances/:walletId
 ```
 
 ## Autenticación
@@ -70,7 +70,7 @@ API Key o X402
 | `walletId` | string | ID de la wallet |
 | `address` | string | Dirección de la wallet |
 | `chains` | array | Lista de chains con balances |
-| `totalValueUsd` | number | Valor total en USD |
+| `totalValueUsd` | number | Valor total en USD (opcional) |
 
 ### Campos de Token
 
@@ -87,19 +87,19 @@ API Key o X402
 | Código | Error | Descripción |
 |--------|-------|-------------|
 | 401 | UNAUTHORIZED | API key inválida |
-| 404 | WALLET_NOT_FOUND | Wallet no existe |
+| 404 | NOT_FOUND | Wallet no existe |
 
 ## Ejemplos
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/balances/pan_wallet_a1b2c3d4e5f6" \
+curl -X GET "https://api.pan.com/api/v1/balances/pan_wallet_a1b2c3d4e5f6" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 
 ```javascript JavaScript
 const response = await fetch(
-  'https://api.pan.tech/v1/balances/pan_wallet_a1b2c3d4e5f6',
+  'https://api.pan.com/api/v1/balances/pan_wallet_a1b2c3d4e5f6',
   {
     headers: {
       'Authorization': `Bearer ${process.env.PAN_API_KEY}`
@@ -112,6 +112,10 @@ console.log('Total USD:', data.totalValueUsd);
 ```
 
 ```typescript SDK
+import Pan from '@odisea-labs/pan';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+
 const balances = await pan.wallet.getBalances('pan_wallet_a1b2c3d4e5f6');
 console.log('Total USD:', balances.totalValueUsd);
 ```
@@ -120,6 +124,6 @@ console.log('Total USD:', balances.totalValueUsd);
 ## Notas
 
 - Los balances se consultan en tiempo real de cada blockchain
-- El campo `totalValueUsd` suma todos los tokens
+- El campo `totalValueUsd` suma todos los tokens (puede ser `null` si no hay precios disponibles)
 - Las chains sin tokens retornan array vacio de `tokens: []`
 - Los precios USD se actualizan cada minuto

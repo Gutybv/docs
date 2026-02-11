@@ -1,25 +1,34 @@
 ---
 title: "Fondear Wallet (Demo)"
-description: "POST /v1/demo/fund"
+description: "POST /api/v1/demo/fund - Endpoint planificado"
 ---
+
+<Warning>
+  **Endpoint no disponible**: Este endpoint está planificado pero **no está implementado actualmente** en la API. La documentación a continuación describe el comportamiento esperado para cuando esté disponible. Intentar usar este endpoint retornará un error `NOT_FOUND`.
+</Warning>
+
+## Estado
+
+| Aspecto | Detalle |
+|---------|---------|
+| Estado actual | **No disponible / Planificado** |
+| Disponibilidad esperada | Por definir |
+
+## Descripción Planificada
 
 Fondea una wallet con tokens de testnet para pruebas.
 
-<Warning>
-  Solo funciona en testnet. No disponible en produccion.
-</Warning>
+<Info>
+  Cuando esté disponible, solo funcionará en testnet. No estará disponible en produccion.
+</Info>
 
-## Endpoint
+## Endpoint Planificado
 
 ```
-POST https://api.pan.tech/v1/demo/fund
+POST https://api.pan.com/api/v1/demo/fund
 ```
 
-## Autenticación
-
-API Key
-
-## Request
+## Request Planificado
 
 ```json
 {
@@ -33,11 +42,7 @@ API Key
 |-------|------|-----------|-------------|
 | `walletId` | string | Si | ID de la wallet pan |
 
-<Info>
-  La cantidad y chain son fijos: **1 USDC** en **arbitrum-sepolia**. Esto es para evitar abuso del faucet.
-</Info>
-
-## Response
+## Response Planificado
 
 ### 200 OK
 
@@ -53,68 +58,10 @@ API Key
 }
 ```
 
-### Campos de Respuesta
+## Alternativa Actual
 
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `success` | boolean | Siempre `true` si exitoso |
-| `walletId` | string | ID de la wallet fondeada |
-| `amount` | number | Cantidad enviada (1 USDC) |
-| `chain` | string | Chain usada (arbitrum-sepolia) |
-| `asset` | string | Token enviado (USDC) |
-| `txHash` | string | Hash de la transacción |
-| `explorerUrl` | string | Link al block explorer |
+Mientras este endpoint no esté disponible, puedes fondear wallets de testnet usando faucets externos:
 
-### Errores
-
-| Código | Error | Descripción |
-|--------|-------|-------------|
-| 401 | UNAUTHORIZED | API key inválida |
-| 404 | WALLET_NOT_FOUND | Wallet no existe |
-| 429 | RATE_LIMITED | Espera 60 segundos entre requests |
-| 500 | FUNDING_FAILED | Error al enviar fondos |
-
-## Ejemplos
-
-<CodeGroup>
-```bash cURL
-curl -X POST https://api.pan.tech/v1/demo/fund \
-  -H "Authorization: Bearer $PAN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "walletId": "pan_wallet_abc123"
-  }'
-```
-
-```javascript JavaScript
-const response = await fetch('https://api.pan.tech/v1/demo/fund', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${process.env.PAN_API_KEY}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    walletId: 'pan_wallet_abc123'
-  })
-});
-
-const result = await response.json();
-console.log('TX:', result.txHash);
-console.log('Explorer:', result.explorerUrl);
-```
-</CodeGroup>
-
-## Rate Limiting
-
-| Escenario | Respuesta |
-|-----------|-----------|
-| Dentro del límite | `200 OK` + txHash |
-| Rate limited | `429 Too Many Requests` - esperar 60 segundos |
-
-## Notas
-
-- **Rate limit**: 1 request por wallet cada **60 segundos**
-- **Cantidad fija**: 1 USDC por request
-- **Chain fija**: arbitrum-sepolia
-- **Solo desarrollo**: No disponible en produccion
-- Los fondos llegan casi instantaneamente (~10-30 segundos)
+1. Obtener la dirección de tu wallet con `GET /api/v1/wallets/:userId`
+2. Usar un faucet de testnet para enviar tokens a esa dirección
+3. Verificar el balance con `GET /api/v1/balances/:walletId`

@@ -6,14 +6,14 @@ description: "Protocolos DeFi utilizados por pan"
 ## Protocolos Principales
 
 pan integra protocolos DeFi de primera línea para ofrecer:
-- **Rendimiento** via Aave V3
+- **Rendimiento** via Aave V3 y Morpho
 - **Bridges** via Across Protocol
 
 ## Aave V3
 
 <Card title="Aave" icon="building-columns">
   Protocolo de prestamos descentralizado más grande del mundo.
-  pan deposita USDC en Aave para generar rendimiento automatico.
+  pan deposita USDC en Aave o Morpho para generar rendimiento automatico.
 </Card>
 
 ### ¿Qué es Aave?
@@ -318,15 +318,16 @@ Estamos evaluando integrar:
 
 <AccordionGroup>
   <Accordion title="¿Puedo elegir el protocolo de yield?">
-    Actualmente pan usa Aave V3 en todas las chains.
-    En el futuro agregaremos opciones para elegir protocolo.
+    pan soporta Aave V3 y Morpho. El sistema selecciona automáticamente
+    el protocolo con mejor APY. El endpoint `/yields` muestra el protocolo
+    de cada rate disponible.
   </Accordion>
 
-  <Accordion title="¿Qué pasa si Aave es hackeado?">
-    Aave tiene uno de los mejores track records en DeFi con $10B+ en TVL
-    y 5+ anos sin incidentes mayores. Sin embargo, siempre existe riesgo
-    de smart contract. pan no puede proteger contra bugs en protocolos
-    subyacentes.
+  <Accordion title="¿Qué pasa si Aave o Morpho es hackeado?">
+    Tanto Aave como Morpho tienen excelentes track records en DeFi con
+    auditorias múltiples y años de operación. Sin embargo, siempre existe
+    riesgo de smart contract. pan no puede proteger contra bugs en
+    protocolos subyacentes.
   </Accordion>
 
   <Accordion title="¿Puedo usar otro bridge?">

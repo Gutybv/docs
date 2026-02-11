@@ -32,7 +32,7 @@ description: "Patrones de integración con pan API"
 
 ```typescript
 // services/pan.service.ts
-import { Pan, Wallet, Balances, Intent } from '@pan/sdk';
+import { Pan, Wallet, Balances, Intent } from '@odisea-labs/pan';
 import { prisma } from './db';
 
 class PanService {
@@ -96,8 +96,7 @@ class PanService {
 
     const intent = await this.pan.lend({
       walletId: user.panWalletId,
-      amount,
-      asset: 'USDC'
+      amount
     });
 
     // Guardar intent en tu DB
@@ -308,7 +307,12 @@ async function lendingFlow(userId: string, amount: number) {
   // 3. Crear intent
   const intent = await panService.lend(userId, amount);
 
-  // 4. Monitorear (o usar webhooks)
-  return await panService.waitForIntent(intent.id);
+  // 4. Monitorear con polling (o usar webhooks cuando estén disponibles)
+  let current = await pan.getIntent(intent.id);
+  while (current.status !== 'completed' && current.status !== 'failed') {
+    await new Promise(r => setTimeout(r, 5000));
+    current = await pan.getIntent(intent.id);
+  }
+  return current;
 }
 ```

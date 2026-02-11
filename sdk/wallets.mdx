@@ -8,15 +8,18 @@ description: "Operaciones de wallet con el SDK"
 ```typescript
 const wallet = await pan.wallet.create({
   userId: 'usuario_123',
-  email: 'usuario@ejemplo.com',  // Opcional
-  metadata: {                     // Opcional
+  chainType: 'ethereum',              // Opcional: 'ethereum' | 'tron' (default: 'ethereum')
+  email: 'usuario@ejemplo.com',       // Opcional
+  metadata: {                          // Opcional
     nombre: 'Juan Perez',
     plan: 'premium'
   }
 });
 
-console.log(wallet.id);       // pan_wallet_abc123
-console.log(wallet.address);  // 0x742d35Cc...
+console.log(wallet.id);        // pan_wallet_abc123
+console.log(wallet.address);   // 0x742d35Cc...
+console.log(wallet.chainType); // ethereum
+console.log(wallet.chains);    // ['ethereum', 'arbitrum', 'base']
 ```
 
 ### Tipos
@@ -26,16 +29,14 @@ interface CreateWalletParams {
   userId: string;
   chainType?: 'ethereum' | 'tron';
   email?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 interface Wallet {
   id: string;
-  userId: string;
   address: string;
-  chainType: string;
+  chainType: 'ethereum' | 'tron';
   chains: string[];
-  metadata?: Record<string, any>;
   createdAt: string;
 }
 ```
@@ -46,6 +47,8 @@ interface Wallet {
 const wallet = await pan.wallet.get('usuario_123');
 
 console.log(wallet.address);
+console.log(wallet.chainType); // 'ethereum' | 'tron'
+console.log(wallet.chains);    // Chains soportadas por esta wallet
 ```
 
 ## Obtener Balances
@@ -66,11 +69,11 @@ for (const chainData of balances.chains) {
 ### Tipos
 
 ```typescript
-interface Balances {
+interface WalletBalances {
   walletId: string;
   address: string;
   chains: ChainBalance[];
-  totalValueUsd: number;
+  totalValueUsd?: number;
 }
 
 interface ChainBalance {
@@ -83,7 +86,7 @@ interface TokenBalance {
   balance: string;
   balanceFormatted: string;
   decimals: number;
-  valueUsd: number;
+  valueUsd?: number;
 }
 ```
 
@@ -92,7 +95,7 @@ interface TokenBalance {
 ### Calcular Total de un Asset
 
 ```typescript
-function getTotalBalance(balances: Balances, asset: string): number {
+function getTotalBalance(balances: WalletBalances, asset: string): number {
   let total = 0;
 
   for (const chainData of balances.chains) {
@@ -115,7 +118,7 @@ console.log('Total USDC:', totalUsdc);
 
 ```typescript
 function hasSufficientFunds(
-  balances: Balances,
+  balances: WalletBalances,
   asset: string,
   required: number
 ): boolean {
@@ -135,7 +138,7 @@ async function getOrCreateWallet(userId: string) {
   try {
     return await pan.wallet.get(userId);
   } catch (error) {
-    if (error.code === 'WALLET_NOT_FOUND') {
+    if (error.code === 'NOT_FOUND') {
       return await pan.wallet.create({ userId });
     }
     throw error;
@@ -148,12 +151,12 @@ async function getOrCreateWallet(userId: string) {
 ```typescript
 import { useState, useEffect, useCallback } from 'react';
 import { usePan } from './usePan';
-import type { Wallet, Balances } from '@pan/sdk';
+import type { Wallet, WalletBalances } from '@odisea-labs/pan';
 
 export function useWallet(userId: string) {
   const pan = usePan();
   const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [balances, setBalances] = useState<Balances | null>(null);
+  const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -166,7 +169,7 @@ export function useWallet(userId: string) {
       const b = await pan.wallet.getBalances(w.id);
       setBalances(b);
     } catch (err) {
-      if (err.code !== 'WALLET_NOT_FOUND') {
+      if (err.code !== 'NOT_FOUND') {
         setError(err);
       }
     } finally {

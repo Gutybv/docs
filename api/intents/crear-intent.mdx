@@ -1,6 +1,6 @@
 ---
 title: "Crear Intent"
-description: "POST /v1/intents"
+description: "POST /api/v1/intents"
 ---
 
 Crea y ejecuta un intent DeFi.
@@ -8,7 +8,7 @@ Crea y ejecuta un intent DeFi.
 ## Endpoint
 
 ```
-POST https://api.pan.tech/v1/intents
+POST https://api.pan.com/api/v1/intents
 ```
 
 ## Autenticación
@@ -27,7 +27,8 @@ POST https://api.pan.tech/v1/intents
   "action": "lend",
   "amount": 1000,
   "asset": "USDC",
-  "chain": "base"
+  "chain": "base",
+  "network": "mainnet"
 }
 ```
 
@@ -67,6 +68,19 @@ POST https://api.pan.tech/v1/intents
 | `chain` | string | Depende | Requerido para withdraw |
 | `fromChain` | string | Depende | Requerido para bridge |
 | `toChain` | string | Depende | Requerido para bridge |
+| `network` | string | No | `mainnet` (default) o `testnet` |
+
+### Acciones Soportadas
+
+| Acción | Descripción |
+|--------|-------------|
+| `lend` | Depositar en protocolo DeFi para generar yield |
+| `withdraw` | Retirar fondos de protocolo DeFi |
+| `bridge` | Transferir fondos entre chains |
+
+<Warning>
+  Solo las acciones `lend`, `withdraw` y `bridge` están soportadas actualmente. Otras acciones como `transfer` o `swap` retornarán un error `UNSUPPORTED_ACTION`.
+</Warning>
 
 ## Response
 
@@ -75,39 +89,41 @@ POST https://api.pan.tech/v1/intents
 ```json
 {
   "id": "intent_xyz789abc123",
-  "walletId": "pan_wallet_abc123",
   "status": "planning",
-  "action": "lend",
-  "amount": 1000,
-  "asset": "USDC",
-  "executionPlan": {
-    "strategy": "single-bridge",
-    "targetChain": "base",
-    "targetProtocol": "aave",
-    "expectedApy": 8.52,
-    "steps": [
-      {
-        "type": "bridge",
-        "sequence": 1,
-        "from": "arbitrum",
-        "to": "base",
-        "asset": "USDC",
-        "amount": "1000"
-      },
-      {
-        "type": "deposit",
-        "sequence": 2,
-        "chain": "base",
-        "protocol": "aave",
-        "amount": "998.50"
-      }
-    ],
-    "estimatedGasUsd": 2.50,
-    "estimatedTime": "3-7 min"
+  "strategy": "bridge-and-lend",
+  "steps": 2,
+  "txHash": null,
+  "bridge": {
+    "fromChain": "arbitrum",
+    "toChain": "base",
+    "inputAmount": "1000",
+    "outputAmount": "998.50",
+    "fees": "1.50",
+    "txHash": null,
+    "fillStatus": "pending"
   },
-  "createdAt": "2024-01-15T10:40:00Z"
+  "deposit": {
+    "chain": "base",
+    "protocol": "aave",
+    "amount": "998.50",
+    "txHash": null
+  },
+  "totalGasUsed": null,
+  "totalGasCostUsd": null,
+  "estimatedTime": "3-7 min",
+  "error": null
 }
 ```
+
+### Estrategias
+
+| Estrategia | Descripción |
+|------------|-------------|
+| `direct-deposit` | Depósito directo en la chain donde están los fondos |
+| `bridge-and-lend` | Bridge a otra chain y luego depósito |
+| `multi-bridge-and-lend` | Múltiples bridges antes del depósito |
+| `simple-withdraw` | Retiro directo del protocolo |
+| `bridge-only` | Solo bridge entre chains |
 
 ### Estados
 
@@ -118,21 +134,24 @@ POST https://api.pan.tech/v1/intents
 | `executing` | Ejecutando transacciones |
 | `completed` | Completado exitosamente |
 | `failed` | Error durante ejecución |
+| `awaiting_confirmation` | Esperando confirmación en blockchain |
 
 ### Errores
 
 | Código | Error | Descripción |
 |--------|-------|-------------|
-| 400 | INVALID_REQUEST | Parámetros invalidos |
-| 400 | INSUFFICIENT_FUNDS | Fondos insuficientes |
+| 400 | VALIDATION_ERROR | Parámetros invalidos |
+| 400 | UNSUPPORTED_ACTION | Acción no soportada |
+| 400 | INVALID_NETWORK | Red inválida |
 | 401 | UNAUTHORIZED | API key inválida |
-| 404 | WALLET_NOT_FOUND | Wallet no existe |
+| 404 | NOT_FOUND | Wallet no existe |
+| 500 | PLANNING_ERROR | Error al generar plan |
 
 ## Ejemplos
 
 <CodeGroup>
 ```bash cURL - Lend
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.com/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -144,7 +163,7 @@ curl -X POST https://api.pan.tech/v1/intents \
 ```
 
 ```bash cURL - Withdraw
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.com/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -157,7 +176,7 @@ curl -X POST https://api.pan.tech/v1/intents \
 ```
 
 ```bash cURL - Bridge
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.com/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -171,10 +190,13 @@ curl -X POST https://api.pan.tech/v1/intents \
 ```
 
 ```typescript SDK - Lend
+import Pan from '@odisea-labs/pan';
+
+const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
+
 const intent = await pan.lend({
   walletId: 'pan_wallet_abc123',
-  amount: 1000,
-  asset: 'USDC'
+  amount: 1000
 });
 ```
 
@@ -200,6 +222,6 @@ const intent = await pan.bridge({
 
 ## Notas
 
-- La ejecución es asincrona. Usa GET /intents/:id para monitorear
+- La ejecución es asincrona. Usa GET /api/v1/intents/:id para monitorear
 - Para `lend`, si no específicas `chain`, pan elige el mejor APY
 - Los intents consumen 5 creditos

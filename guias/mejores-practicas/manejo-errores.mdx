@@ -22,36 +22,33 @@ description: "Como manejar errores correctamente con pan API"
 | Código | Causa | Solución |
 |--------|-------|----------|
 | `UNAUTHORIZED` | API key inválida | Verificar API key |
-| `FORBIDDEN` | Sin permisos | Verificar plan/limites |
+
+### Validación
+
+| Código | Causa | Solución |
+|--------|-------|----------|
+| `VALIDATION_ERROR` | Datos inválidos | Verificar parámetros |
+| `UNSUPPORTED_ACTION` | Acción no soportada | Usar lend/withdraw/bridge |
+| `INVALID_NETWORK` | Network no soportada | Usar mainnet/testnet |
 
 ### Recursos
 
 | Código | Causa | Solución |
 |--------|-------|----------|
-| `WALLET_NOT_FOUND` | Wallet no existe | Crear wallet primero |
-| `INTENT_NOT_FOUND` | Intent no existe | Verificar ID |
-| `WALLET_ALREADY_EXISTS` | Usuario tiene wallet | Usar GET |
+| `NOT_FOUND` | Recurso no existe | Verificar walletId o intentId |
+| `WALLET_LIMIT_EXCEEDED` | Límite de plan | Upgrade |
 
 ### Ejecución
 
 | Código | Causa | Solución |
 |--------|-------|----------|
-| `INSUFFICIENT_FUNDS` | Sin fondos | Depositar más |
-| `BRIDGE_FAILED` | Bridge fallo | Reintentar |
-| `DEPOSIT_FAILED` | Deposito fallo | Verificar protocolo |
-
-### Limites
-
-| Código | Causa | Solución |
-|--------|-------|----------|
-| `RATE_LIMITED` | Muchas requests | Esperar/backoff |
-| `WALLET_LIMIT_EXCEEDED` | Límite de plan | Upgrade |
-| `INSUFFICIENT_CREDITS` | Sin créditos | Comprar |
+| `PLANNING_ERROR` | No se pudo planificar | Verificar fondos suficientes |
+| `INTERNAL_ERROR` | Error interno | Reintentar |
 
 ## Patron de Manejo
 
 ```typescript
-import { Pan, PanError } from '@pan/sdk';
+import { Pan, PanError } from '@odisea-labs/pan';
 
 async function ejecutar<T>(fn: () => Promise<T>): Promise<T> {
   try {
@@ -66,17 +63,15 @@ async function ejecutar<T>(fn: () => Promise<T>): Promise<T> {
 
 function manejarErrorPan(error: PanError): never {
   switch (error.code) {
-    // Errores recuperables
-    case 'RATE_LIMITED':
-      throw new RetryableError(error.message, error.details?.retryAfter);
+    // Errores de validación
+    case 'VALIDATION_ERROR':
+    case 'UNSUPPORTED_ACTION':
+    case 'INVALID_NETWORK':
+      throw new ValidationError(error.message);
 
-    case 'WALLET_NOT_FOUND':
-      throw new NotFoundError('Usuario no tiene wallet');
-
-    case 'INSUFFICIENT_FUNDS':
-      throw new ValidationError(
-        `Faltan ${error.details?.shortfall} ${error.details?.asset}`
-      );
+    // Recurso no encontrado
+    case 'NOT_FOUND':
+      throw new NotFoundError(error.message);
 
     // Errores de configuración
     case 'UNAUTHORIZED':
@@ -85,9 +80,12 @@ function manejarErrorPan(error: PanError): never {
     case 'WALLET_LIMIT_EXCEEDED':
       throw new LimitError('Actualiza tu plan para más wallets');
 
+    // Errores de planificación/ejecución
+    case 'PLANNING_ERROR':
+      throw new ValidationError(error.message);
+
     // Errores de servidor
     case 'INTERNAL_ERROR':
-    case 'SERVICE_UNAVAILABLE':
       throw new ServerError('Intenta más tarde');
 
     default:
@@ -104,10 +102,7 @@ async function conReintentos<T>(
   maxReintentos = 3
 ): Promise<T> {
   const erroresReintentables = [
-    'RATE_LIMITED',
-    'INTERNAL_ERROR',
-    'SERVICE_UNAVAILABLE',
-    'BRIDGE_TIMEOUT'
+    'INTERNAL_ERROR'
   ];
 
   for (let i = 0; i < maxReintentos; i++) {
@@ -144,10 +139,6 @@ async function crearWalletSeguro(userId: string) {
     if (!(error instanceof PanError)) throw error;
 
     switch (error.code) {
-      case 'WALLET_ALREADY_EXISTS':
-        // Usuario ya tiene wallet, obtenerla
-        return await pan.wallet.get(userId);
-
       case 'WALLET_LIMIT_EXCEEDED':
         throw new Error('Limite alcanzado. Contacta soporte.');
 
@@ -180,14 +171,14 @@ async function ejecutarIntent(params: LendParams) {
     if (!(error instanceof PanError)) throw error;
 
     switch (error.code) {
-      case 'BRIDGE_FAILED':
-        // Los fondos están seguros, se puede reintentar
-        console.log('Bridge fallo, reintentando...');
-        return ejecutarIntent(params);
+      case 'PLANNING_ERROR':
+        // No se pudo planificar, verificar fondos
+        throw new Error('No se pudo planificar. Verifica tus fondos.');
 
-      case 'DEPOSIT_FAILED':
-        // Fondos en destino pero no depositados
-        throw new Error('Deposito fallo. Verifica tu wallet.');
+      case 'INTERNAL_ERROR':
+        // Error interno, se puede reintentar
+        console.log('Error interno, reintentando...');
+        return ejecutarIntent(params);
 
       default:
         throw error;
@@ -201,17 +192,17 @@ async function ejecutarIntent(params: LendParams) {
 ```tsx
 function ErrorDisplay({ error }: { error: PanError }) {
   const mensajes: Record<string, { titulo: string; accion?: string }> = {
-    INSUFFICIENT_FUNDS: {
-      titulo: 'Fondos insuficientes',
-      accion: 'Deposita más fondos'
+    VALIDATION_ERROR: {
+      titulo: 'Datos inválidos',
+      accion: 'Verifica los datos ingresados'
     },
-    WALLET_NOT_FOUND: {
-      titulo: 'Wallet no encontrada',
-      accion: 'Crea una wallet primero'
+    NOT_FOUND: {
+      titulo: 'Recurso no encontrado',
+      accion: 'Verifica el ID'
     },
-    RATE_LIMITED: {
-      titulo: 'Demasiadas solicitudes',
-      accion: 'Espera un momento'
+    PLANNING_ERROR: {
+      titulo: 'No se pudo planificar',
+      accion: 'Verifica tus fondos'
     },
     UNAUTHORIZED: {
       titulo: 'Error de autenticación',

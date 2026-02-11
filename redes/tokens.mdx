@@ -47,8 +47,7 @@ pan también soporta estos tokens en mainnet:
 | WETH | `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` | `0x82aF49447D8a07e3bd95BD0d56f35241523fBab1` | `0x4200000000000000000000000000000000000006` |
 
 <Warning>
-Los tokens de testnet no tienen valor real. Puedes obtenerlos de faucets
-o usando el endpoint demo de pan.
+Los tokens de testnet no tienen valor real. Puedes obtenerlos de faucets oficiales.
 </Warning>
 
 ## Formatos de Balance
@@ -159,10 +158,7 @@ para reclamar el rendimiento.
 ## Otros Tokens
 
 <Info>
-Actualmente pan solo soporta USDC. Estamos evaluando agregar soporte para:
-- **USDT** - Otra stablecoin popular
-- **DAI** - Stablecoin descentralizada
-- **ETH** - Para staking
+USDC es el token principal. USDT, DAI y WETH también están soportados en mainnet (ver tabla arriba).
 </Info>
 
 ### Tokens NO Soportados
@@ -184,21 +180,7 @@ pan no soporta y no planea soportar:
 
 ### Para Desarrollo (Testnet)
 
-```bash
-# Usar el endpoint demo de pan (1 USDC en arbitrum-sepolia)
-curl -X POST https://api.pan.tech/v1/demo/fund \
-  -H "Authorization: Bearer $PAN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "walletId": "pan_wallet_abc123"
-  }'
-```
-
-<Note>
-  El endpoint demo envia **1 USDC** en **arbitrum-sepolia**. Hay un rate limit de 1 request por wallet cada 60 segundos.
-</Note>
-
-O usa faucets oficiales:
+Usa faucets oficiales para obtener tokens de prueba:
 - [Circle Faucet](https://faucet.circle.com)
 - [Arbitrum Sepolia Faucet](https://faucet.arbitrum.io)
 
@@ -232,23 +214,15 @@ function isValidUSDC(address: string, chain: string): boolean {
 ## FAQ
 
 <AccordionGroup>
-  <Accordion title="¿Por qué solo USDC y no otras stablecoins?">
-    Empezamos con USDC porque:
-    - Es la stablecoin más transparente y regulada
-    - Tiene liquidez profunda en Aave en todas las chains
-    - Circle (emisor) opera legalmente en EE.UU.
-    - Auditorias mensuales de reservas
-
-    Agregaremos más tokens basado en demanda.
+  <Accordion title="¿Qué tokens soporta pan?">
+    pan soporta USDC como token principal en todas las chains. Adicionalmente,
+    USDT, DAI y WETH están soportados en mainnet. USDC es recomendado por su
+    amplia liquidez en los protocolos DeFi integrados.
   </Accordion>
 
   <Accordion title="¿Puedo depositar ETH directamente?">
-    Actualmente no. pan se enfoca en stablecoins para rendimiento.
-    Si tienes ETH, puedes:
-    1. Intercambiarlo por USDC en un DEX
-    2. Depositar el USDC en pan
-
-    Soporte para ETH staking está en el roadmap.
+    pan soporta WETH (Wrapped ETH) en mainnet. Si tienes ETH nativo,
+    puedes wrapearlo a WETH primero y luego usar pan.
   </Accordion>
 
   <Accordion title="¿Qué pasa si envío un token no soportado?">

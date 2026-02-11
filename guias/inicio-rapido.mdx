@@ -60,7 +60,7 @@ Las wallets son la base de pan. Cada wallet representa un usuario en tu aplicaci
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.pan.tech/v1/wallets \
+curl -X POST https://api.pan.tech/api/v1/wallets \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -73,7 +73,7 @@ curl -X POST https://api.pan.tech/v1/wallets \
 ```
 
 ```javascript JavaScript
-const response = await fetch('https://api.pan.tech/v1/wallets', {
+const response = await fetch('https://api.pan.tech/api/v1/wallets', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${process.env.PAN_API_KEY}`,
@@ -97,7 +97,7 @@ import os
 import requests
 
 response = requests.post(
-    'https://api.pan.tech/v1/wallets',
+    'https://api.pan.tech/api/v1/wallets',
     headers={
         'Authorization': f"Bearer {os.getenv('PAN_API_KEY')}",
         'Content-Type': 'application/json'
@@ -116,7 +116,7 @@ print('Wallet creada:', wallet)
 ```
 
 ```typescript TypeScript (SDK)
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({ apiKey: process.env.PAN_API_KEY });
 
@@ -159,44 +159,16 @@ console.log('Wallet creada:', wallet);
 
 ### 2. Fondea la Wallet (Testnet)
 
-Para probar en testnet, necesitas obtener tokens de prueba. pan ofrece un endpoint de demo para fondear wallets en testnet:
-
-<CodeGroup>
-```bash cURL
-curl -X POST https://api.pan.tech/v1/demo/fund \
-  -H "Authorization: Bearer $PAN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "walletId": "pan_wallet_a1b2c3d4e5f6"
-  }'
-```
-
-```javascript JavaScript
-const response = await fetch('https://api.pan.tech/v1/demo/fund', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${process.env.PAN_API_KEY}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    walletId: 'pan_wallet_a1b2c3d4e5f6'
-  })
-});
-
-const result = await response.json();
-console.log('Fondeo:', result);
-```
-</CodeGroup>
-
-<Info>
-  El endpoint demo/fund siempre envia **1 USDC** en **arbitrum-sepolia**. No se puede configurar cantidad ni chain.
-</Info>
+Para probar en testnet, necesitas obtener tokens de prueba usando faucets externos:
 
 <Tip>
-  Tambien puedes usar faucets externos para obtener tokens de testnet:
+  Usa estos faucets para obtener tokens de testnet:
+  - [Circle USDC Faucet](https://faucet.circle.com) - USDC en testnets
   - [Arbitrum Sepolia Faucet](https://www.alchemy.com/faucets/arbitrum-sepolia)
   - [Base Sepolia Faucet](https://www.alchemy.com/faucets/base-sepolia)
 </Tip>
+
+Envia USDC de testnet a la dirección de la wallet creada en el paso anterior.
 
 ### 3. Consulta el Balance
 
@@ -204,13 +176,13 @@ Verifica que los fondos llegaron consultando el balance de la wallet:
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/balances/pan_wallet_a1b2c3d4e5f6" \
+curl -X GET "https://api.pan.tech/api/v1/balances/pan_wallet_a1b2c3d4e5f6" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 
 ```javascript JavaScript
 const response = await fetch(
-  'https://api.pan.tech/v1/balances/pan_wallet_a1b2c3d4e5f6',
+  'https://api.pan.tech/api/v1/balances/pan_wallet_a1b2c3d4e5f6',
   {
     headers: {
       'Authorization': `Bearer ${process.env.PAN_API_KEY}`
@@ -266,12 +238,12 @@ Antes de prestar, veamos donde conviene depositar:
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/yields" \
+curl -X GET "https://api.pan.tech/api/v1/yields" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 
 ```javascript JavaScript
-const response = await fetch('https://api.pan.tech/v1/yields', {
+const response = await fetch('https://api.pan.tech/api/v1/yields', {
   headers: {
     'Authorization': `Bearer ${process.env.PAN_API_KEY}`
   }
@@ -324,7 +296,7 @@ Ahora viene la magia. Crea un intent de lending y pan se encargara de todo:
 
 <CodeGroup>
 ```bash cURL
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.tech/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -336,7 +308,7 @@ curl -X POST https://api.pan.tech/v1/intents \
 ```
 
 ```javascript JavaScript
-const response = await fetch('https://api.pan.tech/v1/intents', {
+const response = await fetch('https://api.pan.tech/api/v1/intents', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${process.env.PAN_API_KEY}`,
@@ -359,8 +331,7 @@ console.log('Plan de ejecución:', JSON.stringify(intent.executionPlan, null, 2)
 ```typescript TypeScript (SDK)
 const intent = await pan.lend({
   walletId: 'pan_wallet_a1b2c3d4e5f6',
-  amount: 1000,
-  asset: 'USDC'
+  amount: 1000
 });
 
 console.log('Intent creado:', intent.id);
@@ -405,7 +376,7 @@ Los intents se ejecutan de forma asincrona. Consulta el estado periodicamente:
 
 <CodeGroup>
 ```bash cURL
-curl -X GET "https://api.pan.tech/v1/intents/intent_xyz789abc123" \
+curl -X GET "https://api.pan.tech/api/v1/intents/intent_xyz789abc123" \
   -H "Authorization: Bearer $PAN_API_KEY"
 ```
 
@@ -416,7 +387,7 @@ async function monitorearIntent(intentId) {
 
   while (intentos < maxIntentos) {
     const response = await fetch(
-      `https://api.pan.tech/v1/intents/${intentId}`,
+      `https://api.pan.tech/api/v1/intents/${intentId}`,
       {
         headers: {
           'Authorization': `Bearer ${process.env.PAN_API_KEY}`
@@ -430,7 +401,7 @@ async function monitorearIntent(intentId) {
 
     if (intent.status === 'completed') {
       console.log('Intent completado exitosamente!');
-      console.log('Resultados:', JSON.stringify(intent.results, null, 2));
+      console.log('Gas total: $', intent.totalGasCostUsd);
       return intent;
     }
 
@@ -441,7 +412,7 @@ async function monitorearIntent(intentId) {
 
     // Mostrar progreso si está ejecutando
     if (intent.status === 'executing' && intent.executionPlan) {
-      const completados = intent.results?.completedSteps || 0;
+      const completados = intent.results?.length || 0;
       const total = intent.executionPlan.steps.length;
       console.log(`  Progreso: ${completados}/${total} pasos`);
     }
@@ -459,13 +430,16 @@ await monitorearIntent('intent_xyz789abc123');
 ```
 
 ```typescript TypeScript (SDK)
-// El SDK incluye helpers para monitorear
-const completedIntent = await pan.waitForIntent('intent_xyz789abc123', {
-  pollingInterval: 5000, // 5 segundos
-  timeout: 300000 // 5 minutos
-});
+// Monitorear con polling manual
+let current = await pan.getIntent('intent_xyz789abc123');
 
-console.log('Completado:', completedIntent);
+while (current.status !== 'completed' && current.status !== 'failed') {
+  await new Promise(r => setTimeout(r, 5000)); // 5 segundos
+  current = await pan.getIntent('intent_xyz789abc123');
+  console.log(`Estado: ${current.status}`);
+}
+
+console.log('Completado:', current);
 ```
 </CodeGroup>
 
@@ -477,27 +451,19 @@ console.log('Completado:', completedIntent);
   "status": "completed",
   "action": "lend",
   "amount": 1,
-  "asset": "USDC",
   "executionPlan": {
     "strategy": "direct-deposit",
     "steps": [...]
   },
-  "results": {
-    "completedSteps": 1,
-    "transactions": [
-      {
-        "type": "deposit",
-        "txHash": "0x456def...",
-        "chain": "arbitrum-sepolia",
-        "gasUsed": "200000",
-        "gasCostUsd": 0.05
-      }
-    ],
-    "totalGasUsed": "200000",
-    "totalGasCostUsd": 0.05,
-    "finalAmount": "1.00",
-    "apy": 7.23
-  },
+  "results": [
+    {
+      "status": "completed",
+      "txHash": "0x456def...",
+      "gasUsed": 200000
+    }
+  ],
+  "totalGasUsed": 200000,
+  "totalGasCostUsd": 0.05,
   "createdAt": "2024-01-15T10:40:00Z",
   "completedAt": "2024-01-15T10:41:30Z"
 }
@@ -507,12 +473,11 @@ console.log('Completado:', completedIntent);
 ## Resumen del Flujo Completo
 
 ```
-1. POST /v1/wallets         → Crear wallet para el usuario
-2. POST /v1/demo/fund       → Fondear wallet (solo testnet)
-3. GET  /v1/balances/:id    → Verificar que llegaron los fondos
-4. GET  /v1/yields          → Ver mejores oportunidades
-5. POST /v1/intents         → Crear intent de lending
-6. GET  /v1/intents/:id     → Monitorear hasta completar
+1. POST /api/v1/wallets         → Crear wallet para el usuario
+2. GET  /api/v1/balances/:id    → Verificar fondos
+3. GET  /api/v1/yields          → Ver mejores oportunidades
+4. POST /api/v1/intents         → Crear intent de lending
+5. GET  /api/v1/intents/:id     → Monitorear hasta completar
 ```
 
 ## Código Completo
@@ -524,7 +489,7 @@ Aqui tienes un script completo que puedes copiar y ejecutar:
 import 'dotenv/config';
 
 const API_KEY = process.env.PAN_API_KEY;
-const BASE_URL = 'https://api.pan.tech/v1';
+const BASE_URL = 'https://api.pan.tech/api/v1';
 
 async function request(method, endpoint, body = null) {
   const options = {
@@ -555,15 +520,9 @@ async function main() {
   console.log(`   Wallet: ${wallet.id}`);
   console.log(`   Address: ${wallet.address}\n`);
 
-  // 2. Fondear (solo testnet)
-  console.log('2. Fondeando wallet...');
-  await request('POST', '/demo/fund', {
-    walletId: wallet.id
-  });
-  console.log('   Fondeo iniciado (1 USDC en arbitrum-sepolia)\n');
-
-  // Esperar un poco para que lleguen los fondos
-  await new Promise(r => setTimeout(r, 10000));
+  // 2. Fondear wallet usando faucets externos (ver docs)
+  console.log('2. Fondea tu wallet con USDC de testnet desde faucets externos');
+  console.log(`   Dirección: ${wallet.address}\n`);
 
   // 3. Consultar balance
   console.log('3. Consultando balance...');
@@ -608,7 +567,7 @@ import time
 import requests
 
 API_KEY = os.environ.get('PAN_API_KEY')
-BASE_URL = 'https://api.pan.tech/v1'
+BASE_URL = 'https://api.pan.tech/api/v1'
 
 def request(method, endpoint, body=None):
     headers = {
@@ -635,14 +594,9 @@ def main():
     print(f"   Wallet: {wallet['id']}")
     print(f"   Address: {wallet['address']}\n")
 
-    # 2. Fondear
-    print('2. Fondeando wallet...')
-    request('POST', '/demo/fund', {
-        'walletId': wallet['id']
-    })
-    print('   Fondeo iniciado (1 USDC en arbitrum-sepolia)\n')
-
-    time.sleep(10)
+    # 2. Fondear wallet usando faucets externos (ver docs)
+    print('2. Fondea tu wallet con USDC de testnet desde faucets externos')
+    print(f"   Dirección: {wallet['address']}\n")
 
     # 3. Balance
     print('3. Consultando balance...')

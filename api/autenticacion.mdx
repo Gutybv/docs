@@ -15,12 +15,12 @@ Authorization: Bearer pan_sk_tu_api_key
 
 <CodeGroup>
 ```bash cURL
-curl -X GET https://api.pan.tech/v1/yields \
+curl -X GET https://api.pan.com/api/v1/yields \
   -H "Authorization: Bearer pan_sk_a1b2c3d4e5f6..."
 ```
 
 ```javascript JavaScript
-fetch('https://api.pan.tech/v1/yields', {
+fetch('https://api.pan.com/api/v1/yields', {
   headers: {
     'Authorization': `Bearer ${process.env.PAN_API_KEY}`
   }
@@ -29,7 +29,7 @@ fetch('https://api.pan.tech/v1/yields', {
 
 ```python Python
 requests.get(
-    'https://api.pan.tech/v1/yields',
+    'https://api.pan.com/api/v1/yields',
     headers={'Authorization': f'Bearer {API_KEY}'}
 )
 ```
@@ -67,12 +67,12 @@ Para endpoints de solo lectura, puedes usar el protocolo X402 de micropagos:
 
 | Endpoint | X402 |
 |----------|------|
-| GET /wallets/:userId | Si |
-| GET /balances/:walletId | Si |
-| GET /yields | Si |
-| GET /intents/:intentId | Si |
-| POST /wallets | No |
-| POST /intents | No |
+| GET /api/v1/wallets/:userId | Si |
+| GET /api/v1/balances/:walletId | Si |
+| GET /api/v1/yields | Si |
+| GET /api/v1/intents/:intentId | Si |
+| POST /api/v1/wallets | No |
+| POST /api/v1/intents | No |
 
 ### Costo
 
@@ -98,7 +98,7 @@ $0.001 USD por request en USDC (Base, Ethereum, o Sei)
 
 ```json
 {
-  "error": "FORBIDDEN",
+  "error": "WALLET_LIMIT_EXCEEDED",
   "message": "Wallet limit exceeded for your plan"
 }
 ```

@@ -175,9 +175,7 @@ Los costos de gas varian segun la congestión de la red. Los valores son estimad
 // Depositar preferentemente en Arbitrum
 const intent = await pan.lend({
   walletId: 'wallet_123',
-  amount: 1000,
-  asset: 'USDC',
-  preferredChain: 'arbitrum'
+  amount: 1000
 });
 ```
 
@@ -274,17 +272,16 @@ Las siguientes chains están en evaluacion para futuras versiones:
   </Accordion>
 
   <Accordion title="¿Puedo elegir en qué chain depositar?">
-    Si, puedes usar el parámetro `preferredChain` en los intents.
-    Sin embargo, pan optimizara automáticamente si detecta una mejor opcion
-    considerando:
+    pan optimiza automáticamente la chain considerando:
     - Donde están tus fondos actualmente
     - Costos de bridge vs. beneficio de APY
     - Liquidez disponible
+
+    El sistema elige la mejor opción para minimizar costos y maximizar rendimiento.
   </Accordion>
 
   <Accordion title="¿Qué pasa si depósito en Ethereum y quiero mover a Arbitrum?">
-    pan maneja esto automaticamente. Si ejecutas un intent de `lend` con
-    `preferredChain: 'arbitrum'` pero tus fondos están en Ethereum, pan:
+    pan maneja esto automaticamente. Si tus fondos están en Ethereum, pan:
     1. Retira de Aave Ethereum (si aplica)
     2. Ejecuta bridge via Across
     3. Deposita en Aave Arbitrum

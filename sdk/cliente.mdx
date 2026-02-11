@@ -6,14 +6,13 @@ description: "Configuración avanzada del cliente pan"
 ## Instanciación
 
 ```typescript
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({
   apiKey: process.env.PAN_API_KEY!,
-  baseURL: 'https://api.pan.tech/v1',
-  timeout: 30000,
+  baseURL: 'https://api.pan.com',
   debug: false,
-  retries: 3
+  network: 'mainnet'
 });
 ```
 
@@ -22,16 +21,16 @@ const pan = new Pan({
 Para diferentes entornos o API keys:
 
 ```typescript
-// Produccion
+// Produccion (mainnet)
 const panProd = new Pan({
   apiKey: process.env.PAN_API_KEY_PROD!,
-  baseURL: 'https://api.pan.tech/v1'
+  network: 'mainnet'
 });
 
-// Staging
-const panStaging = new Pan({
+// Testnet
+const panTestnet = new Pan({
   apiKey: process.env.PAN_API_KEY_STAGING!,
-  baseURL: 'https://api-staging.pan.tech/v1'
+  network: 'testnet'
 });
 ```
 
@@ -46,52 +45,8 @@ const pan = new Pan({
 });
 
 // Logs:
-// [pan] POST /wallets { userId: 'user_123' }
-// [pan] 201 Created { id: 'pan_wallet_...', ... }
-```
-
-## Reintentos Automáticos
-
-El SDK reintenta automáticamente en errores transitorios:
-
-```typescript
-const pan = new Pan({
-  apiKey: process.env.PAN_API_KEY!,
-  retries: 3  // Reintenta hasta 3 veces
-});
-
-// Errores que se reintentan:
-// - 429 Rate Limited
-// - 500 Internal Server Error
-// - 503 Service Unavailable
-// - Network errors
-```
-
-### Desactivar Reintentos
-
-```typescript
-const pan = new Pan({
-  apiKey: process.env.PAN_API_KEY!,
-  retries: 0  // Sin reintentos
-});
-```
-
-## Timeout
-
-Configura el timeout global o por request:
-
-```typescript
-// Timeout global
-const pan = new Pan({
-  apiKey: process.env.PAN_API_KEY!,
-  timeout: 60000  // 60 segundos
-});
-
-// Timeout por request (proximo)
-const wallet = await pan.wallet.create(
-  { userId: 'user_123' },
-  { timeout: 10000 }
-);
+// [pan SDK] POST https://api.pan.com/api/v1/wallets
+// [pan SDK] Response: { id: 'pan_wallet_...', ... }
 ```
 
 ## Estructura del Cliente
@@ -107,6 +62,7 @@ pan.yields    // Consulta de APYs
 pan.lend()      // Crear intent de lending
 pan.withdraw()  // Crear intent de withdraw
 pan.bridge()    // Crear intent de bridge
+pan.transfer()  // Crear intent de transfer
 
 // Consulta de intent
 pan.getIntent() // Obtener estado de intent
@@ -118,7 +74,7 @@ Para aplicaciones con un solo cliente:
 
 ```typescript
 // lib/pan.ts
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 let panInstance: Pan | null = null;
 
@@ -143,7 +99,7 @@ const wallet = await pan.wallet.create({ userId: 'user_123' });
 ```typescript
 // context/PanContext.tsx
 import { createContext, useContext, useMemo } from 'react';
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const PanContext = createContext<Pan | null>(null);
 
@@ -199,7 +155,7 @@ function WalletButton({ userId }) {
 // app/actions/pan.ts
 'use server';
 
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({
   apiKey: process.env.PAN_API_KEY!
@@ -216,7 +172,6 @@ export async function getBalances(walletId: string) {
 export async function lend(params: {
   walletId: string;
   amount: number;
-  asset: string;
 }) {
   return await pan.lend(params);
 }

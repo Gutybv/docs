@@ -15,6 +15,21 @@ description: "Referencia completa de errores de pan API"
 }
 ```
 
+## Códigos de Error
+
+Los siguientes son los códigos de error soportados por la API:
+
+| Código de Error | Codigo HTTP | Descripción |
+|-----------------|-------------|-------------|
+| `UNAUTHORIZED` | 401 | API key faltante o inválida |
+| `VALIDATION_ERROR` | 400 | Error de validación en el request |
+| `UNSUPPORTED_ACTION` | 400 | Acción no soportada |
+| `INVALID_NETWORK` | 400 | Red inválida |
+| `WALLET_LIMIT_EXCEEDED` | 403 | Límite de wallets del plan excedido |
+| `NOT_FOUND` | 404 | Recurso no encontrado |
+| `PLANNING_ERROR` | 500 | Error durante la planificación del intent |
+| `INTERNAL_ERROR` | 500 | Error interno del servidor |
+
 ## Errores de Autenticación
 
 ### UNAUTHORIZED
@@ -41,29 +56,13 @@ headers: {
 }
 ```
 
-### FORBIDDEN
-
-```json
-{
-  "error": "FORBIDDEN",
-  "message": "Access denied"
-}
-```
-
-**Codigo HTTP**: 403
-
-**Causas**:
-- Créditos insuficientes
-- Plan no permite está operación
-- Acceso a recurso de otro developer
-
 ## Errores de Validación
 
-### INVALID_REQUEST
+### VALIDATION_ERROR
 
 ```json
 {
-  "error": "INVALID_REQUEST",
+  "error": "VALIDATION_ERROR",
   "message": "Invalid request body",
   "details": {
     "field": "amount",
@@ -79,30 +78,34 @@ headers: {
 - Tipo de dato incorrecto
 - Valor fuera de rango
 
-### INVALID_WALLET_ID
+### UNSUPPORTED_ACTION
 
 ```json
 {
-  "error": "INVALID_WALLET_ID",
-  "message": "Wallet ID format is invalid",
+  "error": "UNSUPPORTED_ACTION",
+  "message": "Action not supported",
   "details": {
-    "provided": "wallet123",
-    "expected": "pan_wallet_*"
+    "provided": "swap",
+    "supported": ["lend", "withdraw", "bridge"]
   }
 }
 ```
 
 **Codigo HTTP**: 400
 
-### INVALID_CHAIN
+**Causas**:
+- La acción solicitada no está implementada
+- Acciones soportadas actualmente: `lend`, `withdraw`, `bridge`
+
+### INVALID_NETWORK
 
 ```json
 {
-  "error": "INVALID_CHAIN",
-  "message": "Chain not supported",
+  "error": "INVALID_NETWORK",
+  "message": "Network not supported",
   "details": {
-    "provided": "polygon",
-    "supported": ["ethereum", "arbitrum", "base"]
+    "provided": "devnet",
+    "supported": ["mainnet", "testnet"]
   }
 }
 ```
@@ -111,54 +114,22 @@ headers: {
 
 ## Errores de Recursos
 
-### WALLET_NOT_FOUND
+### NOT_FOUND
 
 ```json
 {
-  "error": "WALLET_NOT_FOUND",
-  "message": "Wallet not found for user",
+  "error": "NOT_FOUND",
+  "message": "Resource not found",
   "details": {
-    "userId": "usuario_123"
+    "resource": "wallet",
+    "id": "usuario_123"
   }
 }
 ```
 
 **Codigo HTTP**: 404
 
-**Solución**: Crear wallet primero o verificar userId
-
-### INTENT_NOT_FOUND
-
-```json
-{
-  "error": "INTENT_NOT_FOUND",
-  "message": "Intent not found",
-  "details": {
-    "intentId": "intent_xyz789"
-  }
-}
-```
-
-**Codigo HTTP**: 404
-
-### WALLET_ALREADY_EXISTS
-
-```json
-{
-  "error": "WALLET_ALREADY_EXISTS",
-  "message": "Wallet already exists for this user",
-  "details": {
-    "userId": "usuario_123",
-    "existingWalletId": "pan_wallet_abc123"
-  }
-}
-```
-
-**Codigo HTTP**: 409
-
-**Solución**: Usar GET para obtener wallet existente
-
-## Errores de Limites
+**Solución**: Verificar que el recurso existe o crearlo primero
 
 ### WALLET_LIMIT_EXCEEDED
 
@@ -178,118 +149,26 @@ headers: {
 
 **Solución**: Actualizar plan o eliminar wallets no usadas
 
-### RATE_LIMITED
-
-```json
-{
-  "error": "RATE_LIMITED",
-  "message": "Too many requests",
-  "details": {
-    "limit": 100,
-    "window": "1 minute",
-    "retryAfter": 45
-  }
-}
-```
-
-**Codigo HTTP**: 429
-
-**Headers**:
-```
-Retry-After: 45
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1642248045
-```
-
-**Solución**: Implementar backoff exponencial
-
-### INSUFFICIENT_CREDITS
-
-```json
-{
-  "error": "INSUFFICIENT_CREDITS",
-  "message": "Not enough credits for this operation",
-  "details": {
-    "required": 5,
-    "available": 2
-  }
-}
-```
-
-**Codigo HTTP**: 402
-
-**Solución**: Comprar más créditos o actualizar plan
-
 ## Errores de Ejecución
 
-### INSUFFICIENT_FUNDS
+### PLANNING_ERROR
 
 ```json
 {
-  "error": "INSUFFICIENT_FUNDS",
-  "message": "Wallet does not have sufficient funds",
+  "error": "PLANNING_ERROR",
+  "message": "Failed to generate execution plan",
   "details": {
-    "asset": "USDC",
-    "required": "1000",
-    "available": "750",
-    "shortfall": "250"
-  }
-}
-```
-
-**Codigo HTTP**: 400
-
-**Solución**: Depositar más fondos antes de ejecutar
-
-### BRIDGE_FAILED
-
-```json
-{
-  "error": "BRIDGE_FAILED",
-  "message": "Bridge operation failed",
-  "details": {
-    "from": "arbitrum",
-    "to": "base",
-    "reason": "Fill timeout exceeded"
+    "reason": "No viable route found"
   }
 }
 ```
 
 **Codigo HTTP**: 500
 
-**Nota**: Los fondos permanecen en la chain origen
-
-### DEPOSIT_FAILED
-
-```json
-{
-  "error": "DEPOSIT_FAILED",
-  "message": "Deposit to protocol failed",
-  "details": {
-    "protocol": "aave",
-    "chain": "base",
-    "reason": "Transaction reverted"
-  }
-}
-```
-
-**Codigo HTTP**: 500
-
-### EXECUTION_TIMEOUT
-
-```json
-{
-  "error": "EXECUTION_TIMEOUT",
-  "message": "Execution exceeded maximum time",
-  "details": {
-    "elapsed": "600s",
-    "maxAllowed": "600s"
-  }
-}
-```
-
-**Codigo HTTP**: 504
+**Causas**:
+- No se encontró una ruta viable para la operación
+- Fondos insuficientes para cubrir gas
+- Protocolo destino no disponible
 
 ## Errores de Servidor
 
@@ -306,19 +185,6 @@ X-RateLimit-Reset: 1642248045
 
 **Solución**: Reintentar con backoff, contactar soporte si persiste
 
-### SERVICE_UNAVAILABLE
-
-```json
-{
-  "error": "SERVICE_UNAVAILABLE",
-  "message": "Service temporarily unavailable"
-}
-```
-
-**Codigo HTTP**: 503
-
-**Solución**: Reintentar después del `Retry-After` header
-
 ## Manejo de Errores
 
 ```javascript
@@ -327,20 +193,23 @@ async function requestConManejo(fn) {
     return await fn();
   } catch (error) {
     switch (error.code) {
-      case 'RATE_LIMITED':
-        const wait = error.details?.retryAfter || 60;
-        await sleep(wait * 1000);
-        return requestConManejo(fn);
+      case 'UNAUTHORIZED':
+        throw new Error('API key inválida o faltante');
 
-      case 'INSUFFICIENT_FUNDS':
-        throw new UserError(`Necesitas ${error.details.shortfall} mas`);
+      case 'VALIDATION_ERROR':
+        throw new Error(`Validación fallida: ${error.message}`);
 
-      case 'WALLET_NOT_FOUND':
-        // Crear wallet automaticamente
-        return await crearWallet(error.details.userId);
+      case 'NOT_FOUND':
+        // Crear recurso automaticamente si aplica
+        throw new Error(`Recurso no encontrado: ${error.details?.resource}`);
+
+      case 'WALLET_LIMIT_EXCEEDED':
+        throw new Error('Límite de wallets alcanzado');
+
+      case 'PLANNING_ERROR':
+        throw new Error(`Error de planificación: ${error.message}`);
 
       case 'INTERNAL_ERROR':
-      case 'SERVICE_UNAVAILABLE':
         // Reintentar con backoff
         await sleep(5000);
         return requestConManejo(fn);

@@ -15,7 +15,7 @@ Una plataforma de inversion quiere:
 ### Obtener y Analizar Yields
 
 ```typescript
-import { Pan } from '@pan/sdk';
+import { Pan } from '@odisea-labs/pan';
 
 const pan = new Pan({ apiKey: process.env.PAN_API_KEY! });
 
@@ -246,9 +246,7 @@ class YieldOptimizer {
     // 2. Depositar en nueva posición (pan automáticamente hace bridge si es necesario)
     const depositIntent = await this.pan.lend({
       walletId,
-      amount: recommendation.amount,
-      asset: 'USDC',
-      preferredChain: recommendation.to.chain
+      amount: recommendation.amount
     });
 
     await this.waitForIntent(depositIntent.id);
@@ -396,26 +394,22 @@ class DCAStrategy {
   async executeDCA(config: DCAConfig): Promise<void> {
     console.log(`Ejecutando DCA: ${config.amount} ${config.asset}`);
 
-    let preferredChain: string | undefined;
-
     if (config.autoOptimize) {
-      // Encontrar mejor APY
+      // Consultar mejor APY disponible
       const yields = await this.pan.yields.getAll();
       const best = yields.rates
         .filter(y => y.asset === config.asset)
         .sort((a, b) => b.apy - a.apy)[0];
 
       if (best) {
-        preferredChain = best.chain;
-        console.log(`Optimizando: depositando en ${best.chain} (${(best.apy * 100).toFixed(2)}% APY)`);
+        console.log(`Mejor APY: ${best.chain} (${(best.apy * 100).toFixed(2)}% APY)`);
       }
     }
 
+    // pan optimiza automaticamente la chain con mejor rendimiento
     const intent = await this.pan.lend({
       walletId: config.walletId,
-      amount: config.amount,
-      asset: config.asset,
-      preferredChain
+      amount: config.amount
     });
 
     console.log(`Intent creado: ${intent.id}`);
@@ -599,11 +593,9 @@ function YieldOptimizer({ walletId }: { walletId: string }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'lend',
+          action: 'lend',
           walletId,
-          amount: currentPosition.amount,
-          asset: 'USDC',
-          preferredChain: targetChain
+          amount: currentPosition.amount
         })
       });
 

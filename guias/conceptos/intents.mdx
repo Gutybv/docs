@@ -23,8 +23,7 @@ Un intent es una declaracion de un objetivo financiero. Cuando creas un intent, 
     // Especificas QUE quieres
     await pan.lend({
       walletId: 'wallet_123',
-      amount: 500,
-      asset: 'USDC'
+      amount: 500
     });
     ```
   </Card>
@@ -64,14 +63,13 @@ Deposita fondos en un protocolo de lending para ganar intereses:
 ```javascript JavaScript
 const intent = await pan.lend({
   walletId: 'pan_wallet_abc123',
-  amount: 1000,
-  asset: 'USDC'
-  // chain es opcional - pan encuentra el mejor APY
+  amount: 1000
+  // network es opcional - pan encuentra el mejor APY
 });
 ```
 
 ```bash cURL
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.tech/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -98,13 +96,12 @@ Retira fondos de un protocolo de lending:
 const intent = await pan.withdraw({
   walletId: 'pan_wallet_abc123',
   amount: 500,
-  asset: 'USDC',
   chain: 'base' // requerido para withdraw
 });
 ```
 
 ```bash cURL
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.tech/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -126,14 +123,13 @@ Mueve fondos entre chains:
 const intent = await pan.bridge({
   walletId: 'pan_wallet_abc123',
   amount: 500,
-  asset: 'USDC',
   fromChain: 'ethereum',
   toChain: 'arbitrum'
 });
 ```
 
 ```bash cURL
-curl -X POST https://api.pan.tech/v1/intents \
+curl -X POST https://api.pan.tech/api/v1/intents \
   -H "Authorization: Bearer $PAN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -156,14 +152,13 @@ curl -X POST https://api.pan.tech/v1/intents \
 | `walletId` | string | Si | ID de la wallet pan |
 | `action` | string | Si | `lend`, `withdraw`, o `bridge` |
 | `amount` | number | Si | Cantidad en unidades del token |
-| `asset` | string | No | Token a usar (default: `USDC`) |
 
 ### Específicos por accion
 
 **Lend:**
 | Parámetro | Tipo | Requerido | Descripción |
 |-----------|------|-----------|-------------|
-| `chain` | string | No | Chain destino. Si no se especifica, pan elige la mejor |
+| `network` | string | No | `mainnet` o `testnet`. Si no se especifica, usa default |
 
 **Withdraw:**
 | Parámetro | Tipo | Requerido | Descripción |
@@ -184,6 +179,7 @@ Los intents pasan por estados bien definidos:
 |--------|-------------|-----------|
 | `pending` | Intent creado y validado | `planning` |
 | `planning` | Analizando balances, consultando yields, generando plan | `executing` o `failed` |
+| `awaiting_confirmation` | Esperando confirmación del usuario | `executing` o `failed` |
 | `executing` | Ejecutando pasos: bridges, deposits | `completed` o `failed` |
 | `completed` | Todas las transacciones confirmadas | Final |
 | `failed` | Error registrado, fondos seguros | Final |
@@ -222,18 +218,15 @@ Los intents pasan por estados bien definidos:
     {
       "status": "executing",
       "executionPlan": {
-        "strategy": "single-bridge",
+        "strategy": "bridge-and-lend",
         "steps": [
-          { "type": "bridge", "status": "completed" },
-          { "type": "deposit", "status": "executing" }
+          { "type": "bridge", "fromChain": "arbitrum", "toChain": "base" },
+          { "type": "deposit", "chain": "base", "protocol": "aave" }
         ]
       },
-      "results": {
-        "completedSteps": 1,
-        "transactions": [
-          { "type": "bridge", "txHash": "0x123..." }
-        ]
-      }
+      "results": [
+        { "status": "completed", "txHash": "0x123..." }
+      ]
     }
     ```
   </Step>
@@ -244,13 +237,12 @@ Los intents pasan por estados bien definidos:
     ```json
     {
       "status": "completed",
-      "results": {
-        "completedSteps": 2,
-        "totalGasUsed": "350000",
-        "totalGasCostUsd": 2.30,
-        "finalAmount": "998.50",
-        "apy": 8.52
-      },
+      "results": [
+        { "status": "completed", "txHash": "0x123..." },
+        { "status": "completed", "txHash": "0x456..." }
+      ],
+      "totalGasUsed": 350000,
+      "totalGasCostUsd": 2.30,
       "completedAt": "2024-01-15T10:45:30Z"
     }
     ```
@@ -262,18 +254,7 @@ Los intents pasan por estados bien definidos:
     ```json
     {
       "status": "failed",
-      "error": {
-        "code": "INSUFFICIENT_FUNDS",
-        "message": "Wallet does not have sufficient USDC",
-        "details": {
-          "required": "1000 USDC",
-          "available": "750 USDC"
-        }
-      },
-      "results": {
-        "completedSteps": 1,
-        "failedStep": 2
-      }
+      "errorMessage": "Not enough USDC across all chains"
     }
     ```
   </Step>
@@ -297,25 +278,25 @@ async function esperarIntent(intentId) {
     // Mostrar progreso si está ejecutando
     if (intent.status === 'executing' && intent.executionPlan) {
       const pasos = intent.executionPlan.steps;
-      const completados = intent.results?.completedSteps || 0;
+      const completados = intent.results?.length || 0;
       console.log(`  Progreso: ${completados}/${pasos.length}`);
 
-      // Mostrar transacciones completadas
-      intent.results?.transactions?.forEach(tx => {
-        console.log(`  ${tx.type}: ${tx.txHash}`);
+      // Mostrar resultados completados
+      intent.results?.forEach(r => {
+        if (r.txHash) console.log(`  TX: ${r.txHash}`);
       });
     }
 
     // Verificar estados finales
     if (intent.status === 'completed') {
       console.log('Intent completado!');
-      console.log(`Gas total: $${intent.results.totalGasCostUsd}`);
+      console.log(`Gas total: $${intent.totalGasCostUsd}`);
       return intent;
     }
 
     if (intent.status === 'failed') {
-      console.error('Intent fallido:', intent.error.message);
-      throw new Error(intent.error.message);
+      console.error('Intent fallido:', intent.errorMessage);
+      throw new Error(intent.errorMessage);
     }
 
     // Esperar 5 segundos
@@ -367,68 +348,77 @@ pan determina automáticamente la mejor estrategia basandose en el estado del wa
 
 | Situación | Estrategia | Pasos |
 |-----------|------------|-------|
-| Fondos ya en mejor chain | `no-bridge` | Deposito directo |
-| Fondos en una chain diferente | `single-bridge` | 1 bridge + deposit |
-| Fondos en múltiples chains | `multi-bridge` | N bridges + deposit |
-| Sin fondos suficientes | `insufficient` | Error: fondos insuficientes |
+| Fondos ya en mejor chain | `direct-deposit` | Deposito directo |
+| Fondos en una chain diferente | `bridge-and-lend` | 1 bridge + deposit |
+| Fondos en múltiples chains | `multi-bridge-and-lend` | N bridges + deposit |
+| Retirar fondos | `simple-withdraw` | Retiro directo |
+| Solo mover fondos | `bridge-only` | Solo bridge |
 
-### no-bridge
+### direct-deposit
 
 Los fondos ya están en la chain destino. Deposito directo.
 
 ```json
 {
-  "strategy": "no-bridge",
+  "strategy": "direct-deposit",
   "steps": [
-    { "type": "deposit", "chain": "base", "amount": "1000" }
+    { "type": "deposit", "chain": "base", "protocol": "aave", "amount": 1000 }
   ]
 }
 ```
 
-### single-bridge
+### bridge-and-lend
 
 Los fondos están en una sola chain diferente. Un bridge + deposito.
 
 ```json
 {
-  "strategy": "single-bridge",
+  "strategy": "bridge-and-lend",
   "steps": [
-    { "type": "bridge", "from": "arbitrum", "to": "base", "amount": "1000" },
-    { "type": "deposit", "chain": "base", "amount": "1000" }
+    { "type": "bridge", "fromChain": "arbitrum", "toChain": "base", "amount": 1000 },
+    { "type": "deposit", "chain": "base", "protocol": "aave", "amount": 999 }
   ]
 }
 ```
 
-### multi-bridge
+### multi-bridge-and-lend
 
 Los fondos están distribuidos en múltiples chains. Varios bridges + deposito.
 
 ```json
 {
-  "strategy": "multi-bridge",
+  "strategy": "multi-bridge-and-lend",
   "steps": [
-    { "type": "bridge", "from": "ethereum", "to": "base", "amount": "200" },
-    { "type": "bridge", "from": "arbitrum", "to": "base", "amount": "500" },
-    { "type": "deposit", "chain": "base", "amount": "1000" }
+    { "type": "bridge", "fromChain": "ethereum", "toChain": "base", "amount": 200 },
+    { "type": "bridge", "fromChain": "arbitrum", "toChain": "base", "amount": 500 },
+    { "type": "deposit", "chain": "base", "protocol": "aave", "amount": 696 }
   ]
 }
 ```
 
-### insufficient
+### simple-withdraw
 
-No hay fondos suficientes. El intent falla en planning.
+Retiro directo de un protocolo de lending.
 
 ```json
 {
-  "status": "failed",
-  "error": {
-    "code": "INSUFFICIENT_FUNDS",
-    "message": "Not enough USDC across all chains",
-    "details": {
-      "required": "1000",
-      "available": "750"
-    }
-  }
+  "strategy": "simple-withdraw",
+  "steps": [
+    { "type": "withdraw", "chain": "base", "protocol": "aave", "amount": 500 }
+  ]
+}
+```
+
+### bridge-only
+
+Solo mover fondos entre chains sin depositar.
+
+```json
+{
+  "strategy": "bridge-only",
+  "steps": [
+    { "type": "bridge", "fromChain": "ethereum", "toChain": "arbitrum", "amount": 1000 }
+  ]
 }
 ```
 
@@ -438,11 +428,12 @@ No hay fondos suficientes. El intent falla en planning.
 
 | Código | Descripción | Solución |
 |--------|-------------|----------|
-| `INSUFFICIENT_FUNDS` | No hay fondos suficientes | Depositar más fondos |
-| `WALLET_NOT_FOUND` | Wallet no existe | Verificar walletId |
-| `INVALID_CHAIN` | Chain no soportada | Usar chain válida |
-| `BRIDGE_FAILED` | Fallo en bridge | Reintentar intent |
-| `DEPOSIT_FAILED` | Fallo en depósito | Verificar protocolo |
+| `VALIDATION_ERROR` | Datos inválidos | Verificar parámetros |
+| `NOT_FOUND` | Wallet o intent no existe | Verificar ID |
+| `UNSUPPORTED_ACTION` | Acción no soportada | Usar lend/withdraw/bridge |
+| `INVALID_NETWORK` | Network no soportada | Usar mainnet/testnet |
+| `PLANNING_ERROR` | Error al planificar | Verificar fondos y balances |
+| `INTERNAL_ERROR` | Error interno | Reintentar |
 
 ### Estructura de Error
 
@@ -473,7 +464,7 @@ async function ejecutarConReintento(params, maxReintentos = 3) {
       ultimoError = error;
 
       // Solo reintentar errores transitorios
-      const reintentables = ['BRIDGE_FAILED', 'NETWORK_ERROR', 'TIMEOUT'];
+      const reintentables = ['INTERNAL_ERROR'];
       if (!reintentables.includes(error.code)) {
         throw error;
       }
@@ -505,8 +496,7 @@ async function lendSiApy(walletId, amount, minApy) {
   // Crear intent
   const intent = await pan.lend({
     walletId,
-    amount,
-    asset: 'USDC'
+    amount
   });
 
   console.log(`Lending a ${best.chain} con ${best.apy}% APY`);
@@ -544,8 +534,7 @@ async function rebalancearAMejorYield(walletId) {
   // pan automáticamente consolidara fondos de todas las chains
   const intent = await pan.lend({
     walletId,
-    amount: totalUsdc,
-    asset: 'USDC'
+    amount: totalUsdc
   });
 
   return intent;
@@ -556,7 +545,7 @@ async function rebalancearAMejorYield(walletId) {
 
 ```javascript
 async function ejecutarConNotificaciones(walletId, amount, onProgress) {
-  const intent = await pan.lend({ walletId, amount, asset: 'USDC' });
+  const intent = await pan.lend({ walletId, amount });
 
   let ultimoEstado = null;
   let ultimosPasos = 0;
@@ -575,7 +564,7 @@ async function ejecutarConNotificaciones(walletId, amount, onProgress) {
     }
 
     // Notificar pasos completados
-    const pasosCompletados = actual.results?.completedSteps || 0;
+    const pasosCompletados = actual.results?.length || 0;
     if (pasosCompletados > ultimosPasos) {
       const paso = actual.executionPlan.steps[pasosCompletados - 1];
       onProgress({
